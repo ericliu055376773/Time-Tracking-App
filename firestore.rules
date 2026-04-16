@@ -1,0 +1,44 @@
+// firestore.rules
+// 部署方式：Firebase Console → Firestore → 規則
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 用戶只能讀取/修改自己的資料，管理員可以讀取所有
+    match /users/{userId} {
+      allow read: if request.auth != null && (
+        request.auth.uid == userId || isAdmin()
+      );
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && (
+        request.auth.uid == userId || isAdmin()
+      );
+    }
+
+    // 打卡紀錄：員工只能讀寫自己的，管理員可讀所有
+    match /punches/{punchId} {
+      allow read: if request.auth != null && (
+        resource.data.uid == request.auth.uid || isAdmin()
+      );
+      allow create: if request.auth != null &&
+        request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // 請假紀錄：員工可申請/讀自己的，管理員可讀寫所有
+    match /leaves/{leaveId} {
+      allow read: if request.auth != null && (
+        resource.data.uid == request.auth.uid || isAdmin()
+      );
+      allow create: if request.auth != null &&
+        request.resource.data.uid == request.auth.uid;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    function isAdmin() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+  }
+}
