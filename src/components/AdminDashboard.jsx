@@ -10,9 +10,10 @@ import { getNetworkInfo, isAllowedNetwork } from '../hooks/useNetworkCheck';
 import SalaryReport from './SalaryReport';
 import LeaveManager from './LeaveManager';
 import ShiftManager from './ShiftManager';
+import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 
-const TABS = ['薪資計算', '打卡紀錄', '請假審核', '員工管理', 'WiFi 設定', '班別設定'];
+const TABS = ['薪資計算', '打卡紀錄', '請假審核', '員工管理', 'WiFi 設定', '班別設定', '排班管理'];
 
 const EMPTY_ADD = {
   name: '', empId: '', pin: '', email: '',
@@ -40,7 +41,6 @@ export default function AdminDashboard() {
       const empSnap = await getDocs(collection(db, 'users'));
       const emps = empSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => e.role === 'employee');
       setEmployees(emps);
-
       const start = Timestamp.fromDate(startOfMonth(parseISO(selectedMonth + '-01')));
       const end   = Timestamp.fromDate(endOfMonth(parseISO(selectedMonth + '-01')));
       const pSnap = await getDocs(query(
@@ -50,7 +50,6 @@ export default function AdminDashboard() {
         orderBy('timestamp', 'asc')
       ));
       setAllPunches(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
-
       const lSnap = await getDocs(query(collection(db, 'leaves'), orderBy('createdAt', 'desc')));
       setAllLeaves(lSnap.docs.map(d => ({ id: d.id, ...d.data() })));
     } catch (err) { console.error(err); }
@@ -138,17 +137,17 @@ export default function AdminDashboard() {
         <KpiCard label="本月應付薪資" value={fmtMoney(totalPayroll)} color="var(--amber)" highlight />
       </div>
 
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4, width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 3, marginBottom: 20, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
         {TABS.map(t => (
           <button key={t} onClick={() => setActiveTab(t)} style={{
-            padding: '8px 16px', borderRadius: 6, fontSize: 12, fontWeight: 500,
+            padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 500,
             background: activeTab === t ? 'var(--amber)' : 'transparent',
             color: activeTab === t ? '#000' : 'var(--text-secondary)',
             position: 'relative',
           }}>
             {t}
             {t === '請假審核' && pendingLeaves > 0 && (
-              <span style={{ position: 'absolute', top: 4, right: 4, width: 7, height: 7, borderRadius: '50%', background: 'var(--red)' }} />
+              <span style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }} />
             )}
           </button>
         ))}
@@ -166,6 +165,8 @@ export default function AdminDashboard() {
         <WifiSettings />
       ) : activeTab === '班別設定' ? (
         <ShiftManager />
+      ) : activeTab === '排班管理' ? (
+        <ScheduleManager />
       ) : (
         <EmployeesTab
           employees={employees}
