@@ -12,8 +12,8 @@ import LeaveManager from './LeaveManager';
 import ShiftManager from './ShiftManager';
 import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-
-const TABS = ['薪資計算', '打卡紀錄', '請假審核', '員工管理', 'WiFi 設定', '班別設定', '排班管理'];
+import PositionManager from './PositionManager';
+const TABS = ['薪資計算', '打卡紀錄', '請假審核', '員工管理', 'WiFi 設定', '職位管理', '班別設定', '排班管理'];
 
 const EMPTY_ADD = {
   name: '', empId: '', pin: '', email: '',
@@ -161,10 +161,12 @@ export default function AdminDashboard() {
         <RecordsTab punches={allPunches} employees={employees} />
       ) : activeTab === '請假審核' ? (
         <LeaveManager isAdmin={true} />
-      ) : activeTab === 'WiFi 設定' ? (
-        <WifiSettings />
-      ) : activeTab === '班別設定' ? (
-        <ShiftManager />
+) : activeTab === 'WiFi 設定' ? (
+  <WifiSettings />
+) : activeTab === '職位管理' ? (
+  <PositionManager />
+) : activeTab === '班別設定' ? (
+  <ShiftManager />
       ) : activeTab === '排班管理' ? (
         <ScheduleManager />
       ) : (
