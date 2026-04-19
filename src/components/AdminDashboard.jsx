@@ -283,17 +283,26 @@ function RecordsTab({ punches, employees }) {
   return (
     <div className="table-wrapper">
       <table>
-        <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>備註</th></tr></thead>
+        <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>狀態</th><th>備註</th></tr></thead>
         <tbody>
           {[...punches].sort((a,b) => b.timestamp?.toMillis() - a.timestamp?.toMillis()).map(p => (
             <tr key={p.id}>
               <td style={{ fontWeight: 500 }}>{empMap[p.uid] || p.userName}</td>
               <td><span className={`badge ${p.type === 'in' ? 'badge-green' : 'badge-red'}`}>{p.type === 'in' ? '▶ 上班' : '⏹ 下班'}</span></td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{p.timestamp?.toDate() ? format(p.timestamp.toDate(), 'MM/dd HH:mm:ss') : '--'}</td>
+              <td style={{ fontSize: 12 }}>
+                {p.type === 'in' && p.lateMinutes > 0
+                  ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>⚠️ 遲到 {p.lateMinutes} 分鐘</span>
+                  : p.type === 'in'
+                  ? <span style={{ color: 'var(--green)' }}>準時</span>
+                  : p.overtimeMinutes > 0
+                  ? <span style={{ color: 'var(--amber)' }}>加班 {p.overtimeMinutes} 分鐘</span>
+                  : '--'}
+              </td>
               <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note || '--'}</td>
             </tr>
           ))}
-          {punches.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
+          {punches.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
         </tbody>
       </table>
     </div>
