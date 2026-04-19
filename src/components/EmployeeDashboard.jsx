@@ -139,7 +139,7 @@ export default function EmployeeDashboard() {
       if (nowMins < startMins - 15) {
         return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘（${shift.id}班 ${shift.start} 上班）` };
       }
-      if (nowMins > endMins) return { ok: false, msg: `已超過 ${shift.id}班 下班時間（${shift.end}）` };
+      
       const lateMin = Math.max(0, nowMins - startMins);
       return { ok: true, msg: lateMin > 0 ? `⚠️ 遲到 ${lateMin} 分鐘` : '', shiftId: shift.id, lateMinutes: lateMin };
     } else {
