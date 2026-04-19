@@ -4,10 +4,11 @@ import { useAuth } from '../contexts/AuthContext';
 export default function Layout({ children }) {
   const { profile, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
+    check();
     window.addEventListener('resize', check);
     return () => window.removeEventListener('resize', check);
   }, []);
@@ -44,7 +45,7 @@ export default function Layout({ children }) {
           }} />
         )}
 
-        {/* 側邊欄 */}
+        {/* 側邊欄 — 桌機版常駐，手機版收合 */}
         {(!isMobile || sidebarOpen) && (
           <aside style={{
             width: 220, flexShrink: 0,
@@ -53,8 +54,7 @@ export default function Layout({ children }) {
             display: 'flex', flexDirection: 'column',
             padding: '20px 12px',
             ...(isMobile ? {
-              position: 'fixed', top: 0, left: 0, bottom: 0,
-              zIndex: 300,
+              position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 300,
             } : {}),
           }}>
             <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -89,9 +89,9 @@ export default function Layout({ children }) {
               <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 14 }}>
                 {profile?.role?.toUpperCase()}
               </div>
-              <button onClick={logout} style={{
+              <button onClick={() => { setSidebarOpen(false); logout(); }} style={{
                 display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-                padding: '8px 10px', borderRadius: 7, fontSize: 12,
+                padding: '8px 10px', borderRadius: 7, fontSize: 12, fontWeight: 500,
                 color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer',
               }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -105,7 +105,7 @@ export default function Layout({ children }) {
           </aside>
         )}
 
-        {/* 主內容 — 手機版佔滿全寬 */}
+        {/* 主內容 */}
         <main style={{ flex: 1, overflow: 'auto', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
           {children}
         </main>
