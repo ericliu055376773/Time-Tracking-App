@@ -99,16 +99,28 @@ export default function EmployeeDashboard() {
   const todayPunches = punches.filter(p => isToday(p.timestamp?.toDate?.() || new Date(0)));
 
   // 雙頭班打卡狀態判斷
-  // 打卡順序：in1 → out1 → in2 → out2
+  // 打卡順序：
+  //   只早班：in1(早) → out1(早)
+  //   只晚班：in1(晚) → out1(晚)
+  //   早+晚：in1(早) → out1(早) → in2(晚) → out2(晚)
   function getPunchState() {
     const inCount = todayPunches.filter(p => p.type === 'in').length;
     const outCount = todayPunches.filter(p => p.type === 'out').length;
     const { shift1, shift2 } = todayShifts;
+    const hasBoth = shift1 && shift2;
 
+    // 只排晚班（沒有早班）
+    if (!shift1 && shift2) {
+      if (inCount === 0) return { nextType: 'in', currentShift: shift2, label: '晚班上班打卡', session: 1 };
+      if (inCount === 1 && outCount === 0) return { nextType: 'out', currentShift: shift2, label: '晚班下班打卡', session: 1 };
+      return { nextType: null, currentShift: null, label: '今日打卡完成', session: 0 };
+    }
+
+    // 只排早班或雙頭班
     if (inCount === 0) return { nextType: 'in', currentShift: shift1, label: '早班上班打卡', session: 1 };
     if (inCount === 1 && outCount === 0) return { nextType: 'out', currentShift: shift1, label: '早班下班打卡', session: 1 };
-    if (inCount === 1 && outCount === 1 && shift2) return { nextType: 'in', currentShift: shift2, label: '晚班上班打卡', session: 2 };
-    if (inCount === 2 && outCount === 1 && shift2) return { nextType: 'out', currentShift: shift2, label: '晚班下班打卡', session: 2 };
+    if (inCount === 1 && outCount === 1 && hasBoth) return { nextType: 'in', currentShift: shift2, label: '晚班上班打卡', session: 2 };
+    if (inCount === 2 && outCount === 1 && hasBoth) return { nextType: 'out', currentShift: shift2, label: '晚班下班打卡', session: 2 };
     return { nextType: null, currentShift: null, label: '今日打卡完成', session: 0 };
   }
 
@@ -249,17 +261,19 @@ export default function EmployeeDashboard() {
 
             {/* 今日打卡進度 */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '14px 0', flexWrap: 'wrap' }}>
-              {[
-                { label: '早班上班', idx: 0 },
-                { label: '早班下班', idx: 1 },
-                ...(todayShifts.shift2 ? [{ label: '晚班上班', idx: 2 }, { label: '晚班下班', idx: 3 }] : []),
-              ].map(({ label, idx }) => {
+              {(
+                !todayShifts.shift1 && todayShifts.shift2
+                  ? [{ label: '晚班上班', idx: 0 }, { label: '晚班下班', idx: 1 }]
+                  : [
+                      { label: '早班上班', idx: 0 },
+                      { label: '早班下班', idx: 1 },
+                      ...(todayShifts.shift2 ? [{ label: '晚班上班', idx: 2 }, { label: '晚班下班', idx: 3 }] : []),
+                    ]
+              ).map(({ label, idx }) => {
                 const done = todayPunches.length > idx;
                 const current = todayPunches.length === idx;
                 return (
-                  <div key={idx} style={{
-                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                  }}>
+                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
                     <div style={{
                       width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
                       background: done ? 'var(--green)' : current ? 'var(--amber)' : 'var(--bg-elevated)',
