@@ -1,14 +1,13 @@
-// src/contexts/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);       // Firebase Auth user
-  const [profile, setProfile] = useState(null); // Firestore user profile
+  const [user, setUser] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -33,8 +32,16 @@ export function AuthProvider({ children }) {
     return unsubscribe;
   }, []);
 
+  async function logout() {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('登出失敗：', err);
+    }
+  }
+
   return (
-    <AuthContext.Provider value={{ user, profile, loading, setProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, setProfile, logout }}>
       {children}
     </AuthContext.Provider>
   );
