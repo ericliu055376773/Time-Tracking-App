@@ -147,11 +147,7 @@ export default function EmployeeDashboard() {
     calcSalaryFromPunches(punches, profile);
 
   return (
-    <div
-      style={{ padding: '32px 40px', maxWidth: 960, margin: '0 auto' }}
-      className="fade-in"
-    >
-      <div
+<div style={{ padding: '16px', maxWidth: 960, margin: '0 auto' }} className="fade-in">
         style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -194,9 +190,7 @@ export default function EmployeeDashboard() {
       </div>
 
       {activeTab === '打卡' ? (
-        <div
-          style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 24 }}
-        >
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* WiFi 狀態卡片 */}
             <div
