@@ -216,4 +216,124 @@ export default function EmployeeDashboard() {
           </div>
 
           {/* 時鐘 + 打卡 */}
-          <div className="card" style={{ te
+          <div className="card" style={{ textAlign: 'center', padding: '20px 16px' }}>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 42, fontWeight: 300, letterSpacing: '0.04em', lineHeight: 1, marginBottom: 6 }}>
+              {format(now, 'HH:mm:ss')}
+            </div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
+              {format(now, 'yyyy年MM月dd日 EEEE', { locale: zhTW })}
+            </div>
+            <div style={{ margin: '12px 0', display: 'flex', justifyContent: 'center' }}>
+              {isClockedIn ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)' }}>
+                    上班中 · {lastPunch?.timestamp?.toDate ? format(lastPunch.timestamp.toDate(), 'HH:mm') : '--'}
+                  </span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} />
+                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)' }}>尚未打卡</span>
+                </div>
+              )}
+            </div>
+            {shiftWarning && (
+              <div style={{
+                background: shiftWarning.includes('加班') || shiftWarning.includes('晚到') ? 'var(--amber-glow)' : 'var(--red-glow)',
+                border: `1px solid ${shiftWarning.includes('加班') || shiftWarning.includes('晚到') ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                borderRadius: 8, padding: '8px 12px', marginBottom: 10,
+                fontSize: 12, color: shiftWarning.includes('加班') || shiftWarning.includes('晚到') ? 'var(--amber)' : 'var(--red)',
+                textAlign: 'left',
+              }}>{shiftWarning}</div>
+            )}
+            <input value={note} onChange={e => setNote(e.target.value)} placeholder="備註（選填）" style={{ marginBottom: 10, fontSize: 13 }} />
+            <button onClick={handlePunch}
+              disabled={punchLoading || networkStatus.checking || !canPunch}
+              style={{
+                width: '100%', padding: 13, borderRadius: 10, fontSize: 15, fontWeight: 700,
+                background: !canPunch ? 'var(--bg-elevated)' : isClockedIn ? 'var(--red-glow)' : 'var(--amber)',
+                color: !canPunch ? 'var(--text-muted)' : isClockedIn ? 'var(--red)' : '#000',
+                border: isClockedIn && canPunch ? '1px solid rgba(239,68,68,0.4)' : 'none',
+                cursor: canPunch ? 'pointer' : 'not-allowed',
+              }}>
+              {punchLoading ? '處理中...' :
+               networkStatus.checking ? '偵測網路中...' :
+               !networkStatus.allowed ? '需連接辦公室 WiFi' :
+               !todayShift ? '今日未排班' :
+               isClockedIn ? '⏹ 下班打卡' : '▶ 上班打卡'}
+            </button>
+          </div>
+
+          {/* 本月統計 */}
+          <div className="card">
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 12 }}>本月統計</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <StatRow label="工作時數" value={fmtHours(totalHours)} />
+              {totalOvertimeHours > 0 && <StatRow label="加班時數" value={fmtHours(totalOvertimeHours)} color="var(--amber)" />}
+              <StatRow label="薪資類型" value={profile?.payType === 'hourly' ? `時薪 $${profile?.hourlyRate}` : '月薪制'} />
+              <StatRow label="預估薪資" value={fmtMoney(totalSalary)} highlight />
+            </div>
+          </div>
+
+          {/* 打卡紀錄 */}
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <h2 style={{ fontSize: 14, fontWeight: 600 }}>打卡紀錄</h2>
+              <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width: 150, fontSize: 12 }} />
+            </div>
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>
+            ) : dailyRecords.length === 0 ? (
+              <div className="card" style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13 }}>本月尚無打卡紀錄</div>
+            ) : (
+              <div className="table-wrapper">
+                <table>
+                  <thead>
+                    <tr><th>日期</th><th>班別</th><th>上班</th><th>下班</th><th>工時</th><th>薪資</th></tr>
+                  </thead>
+                  <tbody>
+                    {dailyRecords.map(r => (
+                      <tr key={r.date}>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.date}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>{r.shiftId || '--'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 11 }}>{r.inTime || '--'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontSize: 11 }}>{r.outTime || '--'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.hours > 0 ? fmtHours(r.hours) : '--'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', color: 'var(--amber)', fontSize: 11 }}>{r.salary > 0 ? fmtMoney(r.salary) : '--'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {dailyRecords.length > 0 && (
+              <div className="card" style={{ background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.25)', marginTop: 10 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 2 }}>{selectedMonth} 薪資估計</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fmtHours(totalHours)}{totalOvertimeHours > 0 ? ` · 加班 ${fmtHours(totalOvertimeHours)}` : ''}</div>
+                  </div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 600, color: 'var(--amber)' }}>{fmtMoney(totalSalary)}</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        <LeaveManager isAdmin={false} />
+      )}
+    </div>
+  );
+}
+
+function StatRow({ label, value, highlight, color }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: color || (highlight ? 'var(--amber)' : 'var(--text-primary)') }}>
+        {value}
+      </span>
+    </div>
+  );
+}
