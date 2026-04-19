@@ -20,7 +20,6 @@ export default function Login() {
 
   function reset() { setError(''); setSuccess(''); }
 
-  // 點 Logo 5 下進入管理員（測試用，之後可改成密碼）
   async function handleLogoClick() {
     const next = logoClickCount + 1;
     setLogoClickCount(next);
@@ -48,7 +47,6 @@ export default function Login() {
     setLoading(false);
   }
 
-  // 員工登入
   async function handleEmployeeLogin(e) {
     e.preventDefault();
     if (pin.length !== 10) { setError('PIN 碼必須是 10 位數字'); return; }
@@ -65,27 +63,31 @@ export default function Login() {
     setLoading(false);
   }
 
-  // 員工註冊
   async function handleEmployeeRegister(e) {
     e.preventDefault();
     if (!name.trim()) { setError('請輸入姓名'); return; }
-    if (!empId.trim()) { setError('請輸入員工編號'); return; }
     if (!/^\d{10}$/.test(pin)) { setError('PIN 碼必須是 10 位數字'); return; }
     reset(); setLoading(true);
     try {
-      const existing = await getDocs(query(collection(db, 'users'), where('empId', '==', empId.trim())));
-      if (!existing.empty) { setError('此員工編號已被使用'); setLoading(false); return; }
-      const email = `${empId.trim().toLowerCase()}@internal.timeclock`;
+      // 用姓名產生唯一 empId
+      const timestamp = Date.now().toString().slice(-6);
+      const generatedEmpId = `EMP${timestamp}`;
+      const email = `${generatedEmpId.toLowerCase()}@internal.timeclock`;
       const cred = await createUserWithEmailAndPassword(auth, email, pin);
       await setDoc(doc(db, 'users', cred.user.uid), {
-        name: name.trim(), empId: empId.trim(), email,
-        role: 'employee', payType, hourlyRate: Number(hourlyRate),
-        monthlySalary: 30000, overtimeEnabled: false,
+        name: name.trim(),
+        empId: generatedEmpId,
+        email,
+        role: 'employee',
+        payType,
+        hourlyRate: Number(hourlyRate),
+        monthlySalary: 30000,
+        overtimeEnabled: false,
         createdAt: serverTimestamp(),
       });
       setSuccess('註冊成功！正在登入...');
     } catch (err) {
-      const msgs = { 'auth/email-already-in-use': '此員工編號已被使用' };
+      const msgs = { 'auth/email-already-in-use': '此帳號已被使用' };
       setError(msgs[err.code] || '註冊失敗：' + err.message);
     }
     setLoading(false);
@@ -95,22 +97,18 @@ export default function Login() {
     <div style={{
       minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
       background: 'var(--bg-base)',
-      backgroundImage: 'radial-gradient(ellipse at 20% 50%, rgba(245,158,11,0.04) 0%, transparent 60%)',
     }}>
       <div style={{ width: '100%', maxWidth: 420, padding: '0 20px' }}>
 
-        {/* Logo — 點 5 下進入管理員 */}
+        {/* Logo */}
         <div style={{ marginBottom: 32, textAlign: 'center' }}>
-          <div
-            onClick={handleLogoClick}
-            style={{
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              width: 64, height: 64, background: 'var(--amber-glow)',
-              border: `1px solid ${logoClickCount > 0 ? 'var(--amber)' : 'rgba(245,158,11,0.4)'}`,
-              borderRadius: 16, marginBottom: 16, cursor: 'pointer',
-              transition: 'all 0.15s',
-              transform: logoClickCount > 0 ? 'scale(0.95)' : 'scale(1)',
-            }}>
+          <div onClick={handleLogoClick} style={{
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 64, height: 64, background: 'var(--amber-glow)',
+            border: `1px solid ${logoClickCount > 0 ? 'var(--amber)' : 'rgba(245,158,11,0.4)'}`,
+            borderRadius: 16, marginBottom: 16, cursor: 'pointer', transition: 'all 0.15s',
+            transform: logoClickCount > 0 ? 'scale(0.95)' : 'scale(1)',
+          }}>
             <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="1.8">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
@@ -132,7 +130,7 @@ export default function Login() {
 
           {/* 登入 / 註冊 切換 */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4 }}>
-            {[['login','員工登入'],['register','員工註冊']].map(([key, label]) => (
+            {[['login', '員工登入'], ['register', '員工註冊']].map(([key, label]) => (
               <button key={key} type="button" onClick={() => { setMode(key); reset(); }}
                 style={{
                   padding: '8px 0', borderRadius: 6, fontSize: 13, fontWeight: 500,
@@ -149,12 +147,12 @@ export default function Login() {
             <form onSubmit={handleEmployeeLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <label style={lbl}>
                 <span>員工編號</span>
-                <input value={empId} onChange={e => setEmpId(e.target.value)} placeholder="例如：E001" required />
+                <input value={empId} onChange={e => setEmpId(e.target.value)} placeholder="例如：EMP123456" required />
               </label>
               <label style={lbl}>
                 <span>10 位 PIN 碼</span>
                 <input type="password" inputMode="numeric" maxLength={10}
-                  value={pin} onChange={e => setPin(e.target.value.replace(/\D/g,'').slice(0,10))}
+                  value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   placeholder="輸入 10 位數字" required />
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{pin.length} / 10 位</span>
               </label>
@@ -165,7 +163,7 @@ export default function Login() {
             </form>
           )}
 
-          {/* 員工註冊 */}
+          {/* 員工註冊 — 只需姓名 + PIN */}
           {mode === 'register' && (
             <form onSubmit={handleEmployeeRegister} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <label style={lbl}>
@@ -173,13 +171,9 @@ export default function Login() {
                 <input value={name} onChange={e => setName(e.target.value)} placeholder="輸入姓名" required />
               </label>
               <label style={lbl}>
-                <span>員工編號</span>
-                <input value={empId} onChange={e => setEmpId(e.target.value)} placeholder="例如：E001" required />
-              </label>
-              <label style={lbl}>
                 <span>10 位 PIN 碼（之後登入用）</span>
                 <input type="password" inputMode="numeric" maxLength={10}
-                  value={pin} onChange={e => setPin(e.target.value.replace(/\D/g,'').slice(0,10))}
+                  value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 10))}
                   placeholder="設定 10 位數字" required />
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{pin.length} / 10 位</span>
               </label>
@@ -196,14 +190,16 @@ export default function Login() {
                   <input type="number" value={hourlyRate} onChange={e => setHourlyRate(e.target.value)} min={0} />
                 </label>
               )}
+              <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.6 }}>
+                📌 員工編號將由系統自動產生，註冊後請記下編號用於登入
+              </div>
               {error && <div style={errStyle}>{error}</div>}
-              {success && <div style={{ background: 'var(--green-glow)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 6, padding: '10px 14px', color: 'var(--green)', fontSize: 13 }}>{success}</div>}
+              {success && <div style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', borderRadius: 6, padding: '10px 14px', color: 'var(--green)', fontSize: 13 }}>{success}</div>}
               <button type="submit" disabled={loading || pin.length !== 10} style={btnStyle}>
                 {loading ? '處理中...' : '建立帳號'}
               </button>
             </form>
           )}
-
         </div>
 
         <div style={{ textAlign: 'center', marginTop: 16, fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>
