@@ -24,7 +24,7 @@ export default function EmployeeDashboard() {
   const [activeTab, setActiveTab] = useState('打卡');
   const [networkInfo, setNetworkInfo] = useState({ publicIP: null, localIP: null });
   const [networkStatus, setNetworkStatus] = useState({ checking: true, allowed: false, reason: '', matchedNetwork: '' });
-  const [todayShift, setTodayShift] = useState(null);
+  const [todayShifts, setTodayShifts] = useState({ shift1: null, shift2: null });
   const [shiftWarning, setShiftWarning] = useState('');
 
   useEffect(() => {
@@ -50,23 +50,29 @@ export default function EmployeeDashboard() {
   }, []);
 
   useEffect(() => {
-    async function loadShift() {
+    async function loadShifts() {
       if (!user) return;
       try {
         const today = format(new Date(), 'yyyy-MM-dd');
         const schedSnap = await getDoc(doc(db, 'settings', 'schedule'));
         const assignments = schedSnap.exists() ? (schedSnap.data().assignments || {}) : {};
-        const shiftId = assignments[`${user.uid}_${today}`];
-        if (shiftId) {
-          const shiftSnap = await getDoc(doc(db, 'settings', 'shifts'));
-          const shifts = shiftSnap.exists() ? (shiftSnap.data().list || []) : [];
-          setTodayShift(shifts.find(s => s.id === shiftId) || null);
+        const val = assignments[`${user.uid}_${today}`];
+        const shiftSnap = await getDoc(doc(db, 'settings', 'shifts'));
+        const shifts = shiftSnap.exists() ? (shiftSnap.data().list || []) : [];
+
+        if (!val) {
+          setTodayShifts({ shift1: null, shift2: null });
+        } else if (typeof val === 'string') {
+          setTodayShifts({ shift1: shifts.find(s => s.id === val) || null, shift2: null });
         } else {
-          setTodayShift(null);
+          setTodayShifts({
+            shift1: val.shift1 ? (shifts.find(s => s.id === val.shift1) || null) : null,
+            shift2: val.shift2 ? (shifts.find(s => s.id === val.shift2) || null) : null,
+          });
         }
       } catch (err) { console.error(err); }
     }
-    loadShift();
+    loadShifts();
   }, [user]);
 
   const fetchPunches = useCallback(async () => {
@@ -91,45 +97,67 @@ export default function EmployeeDashboard() {
   useEffect(() => { fetchPunches(); }, [fetchPunches]);
 
   const todayPunches = punches.filter(p => isToday(p.timestamp?.toDate?.() || new Date(0)));
-  const lastPunch = todayPunches[todayPunches.length - 1];
-  const isClockedIn = lastPunch?.type === 'in';
 
-  function validatePunchTime(type) {
-    if (!todayShift) return { ok: false, msg: '今日未排班，無法打卡' };
+  // 雙頭班打卡狀態判斷
+  // 打卡順序：in1 → out1 → in2 → out2
+  function getPunchState() {
+    const inCount = todayPunches.filter(p => p.type === 'in').length;
+    const outCount = todayPunches.filter(p => p.type === 'out').length;
+    const { shift1, shift2 } = todayShifts;
+
+    if (inCount === 0) return { nextType: 'in', currentShift: shift1, label: '早班上班打卡', session: 1 };
+    if (inCount === 1 && outCount === 0) return { nextType: 'out', currentShift: shift1, label: '早班下班打卡', session: 1 };
+    if (inCount === 1 && outCount === 1 && shift2) return { nextType: 'in', currentShift: shift2, label: '晚班上班打卡', session: 2 };
+    if (inCount === 2 && outCount === 1 && shift2) return { nextType: 'out', currentShift: shift2, label: '晚班下班打卡', session: 2 };
+    return { nextType: null, currentShift: null, label: '今日打卡完成', session: 0 };
+  }
+
+  const punchState = getPunchState();
+  const isClockedIn = todayPunches.length > 0 && todayPunches[todayPunches.length - 1].type === 'in';
+
+  function validatePunchTime(type, shift) {
+    if (!shift) return { ok: false, msg: '今日未排班，無法打卡' };
     const nowMins = now.getHours() * 60 + now.getMinutes();
-    const [sh, sm] = todayShift.start.split(':').map(Number);
-    const [eh, em] = todayShift.end.split(':').map(Number);
+    const [sh, sm] = shift.start.split(':').map(Number);
+    const [eh, em] = shift.end.split(':').map(Number);
     const startMins = sh * 60 + sm;
     const endMins = eh * 60 + em;
+
     if (type === 'in') {
       if (nowMins < startMins - 15) {
-        return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘` };
+        return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘（${shift.id}班 ${shift.start} 上班）` };
       }
-      if (nowMins > endMins) return { ok: false, msg: `已超過下班時間（${todayShift.end}）` };
+      if (nowMins > endMins) return { ok: false, msg: `已超過 ${shift.id}班 下班時間（${shift.end}）` };
       const lateMin = Math.max(0, nowMins - startMins);
-      return { ok: true, msg: lateMin > 0 ? `晚到 ${lateMin} 分鐘` : '', shiftId: todayShift.id };
+      return { ok: true, msg: lateMin > 0 ? `⚠️ 遲到 ${lateMin} 分鐘` : '', shiftId: shift.id, lateMinutes: lateMin };
     } else {
       const overMins = Math.max(0, nowMins - endMins);
       const otUnits = Math.floor(overMins / 15);
       const otMins = otUnits * 15;
-      return { ok: true, msg: otMins > 0 ? `加班 ${otMins} 分鐘（${otUnits} 個單位）` : '', shiftId: todayShift.id, overtimeMinutes: otMins };
+      return { ok: true, msg: otMins > 0 ? `加班 ${otMins} 分鐘（${otUnits} 個單位）` : '', shiftId: shift.id, overtimeMinutes: otMins };
     }
   }
 
   async function handlePunch() {
     if (!user || punchLoading) return;
     if (!networkStatus.allowed) { alert(networkStatus.reason || '請連接辦公室 WiFi'); return; }
-    const type = isClockedIn ? 'out' : 'in';
-    const validation = validatePunchTime(type);
+    if (!punchState.nextType) { alert('今日打卡已完成！'); return; }
+    if (!punchState.currentShift) { setShiftWarning('今日未排班，無法打卡'); return; }
+
+    const validation = validatePunchTime(punchState.nextType, punchState.currentShift);
     if (!validation.ok) { setShiftWarning(validation.msg); return; }
     setShiftWarning('');
     setPunchLoading(true);
     try {
       await addDoc(collection(db, 'punches'), {
         uid: user.uid, userName: profile?.name || '',
-        type, timestamp: serverTimestamp(),
-        date: format(now, 'yyyy-MM-dd'), note: note.trim(),
+        type: punchState.nextType,
+        timestamp: serverTimestamp(),
+        date: format(now, 'yyyy-MM-dd'),
+        note: note.trim(),
         shiftId: validation.shiftId || '',
+        session: punchState.session,
+        lateMinutes: validation.lateMinutes || 0,
         overtimeMinutes: validation.overtimeMinutes || 0,
         networkName: networkStatus.matchedNetwork || '',
         publicIP: networkInfo.publicIP || '',
@@ -142,7 +170,7 @@ export default function EmployeeDashboard() {
   }
 
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, profile);
-  const canPunch = networkStatus.allowed && todayShift;
+  const canPunch = networkStatus.allowed && (todayShifts.shift1 || todayShifts.shift2) && punchState.nextType;
 
   return (
     <div style={{ padding: '12px', maxWidth: 600, margin: '0 auto' }} className="fade-in">
@@ -166,28 +194,33 @@ export default function EmployeeDashboard() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* 今日班別 */}
-          <div className="card" style={{
-            padding: '12px 16px',
-            border: todayShift ? `1px solid ${todayShift.color}44` : '1px solid var(--border)',
-            background: todayShift ? todayShift.color + '11' : 'var(--bg-card)',
-          }}>
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 8 }}>今日班別</div>
-            {todayShift ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{
-                  width: 40, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center',
-                  justifyContent: 'center', fontSize: 18, fontWeight: 700, fontFamily: 'var(--mono)',
-                  background: todayShift.color + '22', color: todayShift.color,
-                  border: `1px solid ${todayShift.color}44`,
-                }}>{todayShift.id}</div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: todayShift.color }}>{todayShift.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>{todayShift.start} → {todayShift.end}</div>
-                  <div style={{ fontSize: 11, color: 'var(--amber)' }}>可提早 15 分鐘打卡</div>
-                </div>
-              </div>
-            ) : (
+          <div className="card" style={{ padding: '12px 16px' }}>
+            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 10 }}>今日班別</div>
+            {!todayShifts.shift1 && !todayShifts.shift2 ? (
               <div style={{ color: 'var(--text-muted)', fontSize: 13 }}>今日未排班（休假）</div>
+            ) : (
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                {[{ label: '早班', shift: todayShifts.shift1 }, { label: '晚班', shift: todayShifts.shift2 }].map(({ label, shift }) =>
+                  shift ? (
+                    <div key={label} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 140,
+                      padding: '10px 14px', borderRadius: 10,
+                      background: shift.color + '11', border: `1px solid ${shift.color}44`,
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 8, display: 'flex', alignItems: 'center',
+                        justifyContent: 'center', fontSize: 16, fontWeight: 700, fontFamily: 'var(--mono)',
+                        background: shift.color + '22', color: shift.color, border: `1px solid ${shift.color}44`,
+                      }}>{shift.id}</div>
+                      <div>
+                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{label}</div>
+                        <div style={{ fontWeight: 600, fontSize: 13, color: shift.color }}>{shift.name}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>{shift.start} → {shift.end}</div>
+                      </div>
+                    </div>
+                  ) : null
+                )}
+              </div>
             )}
           </div>
 
@@ -213,33 +246,56 @@ export default function EmployeeDashboard() {
             <div style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)', letterSpacing: '0.08em' }}>
               {format(now, 'yyyy年MM月dd日 EEEE', { locale: zhTW })}
             </div>
-            <div style={{ margin: '12px 0', display: 'flex', justifyContent: 'center' }}>
-              {isClockedIn ? (
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)' }}>
-                  ● 上班中 · {lastPunch?.timestamp?.toDate ? format(lastPunch.timestamp.toDate(), 'HH:mm') : '--'}
-                </span>
-              ) : (
-                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)' }}>○ 尚未打卡</span>
-              )}
+
+            {/* 今日打卡進度 */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '14px 0', flexWrap: 'wrap' }}>
+              {[
+                { label: '早班上班', idx: 0 },
+                { label: '早班下班', idx: 1 },
+                ...(todayShifts.shift2 ? [{ label: '晚班上班', idx: 2 }, { label: '晚班下班', idx: 3 }] : []),
+              ].map(({ label, idx }) => {
+                const done = todayPunches.length > idx;
+                const current = todayPunches.length === idx;
+                return (
+                  <div key={idx} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                  }}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
+                      background: done ? 'var(--green)' : current ? 'var(--amber)' : 'var(--bg-elevated)',
+                      color: done || current ? '#000' : 'var(--text-muted)',
+                      border: current ? '2px solid var(--amber)' : '1px solid var(--border)',
+                    }}>{done ? '✓' : idx + 1}</div>
+                    <div style={{ fontSize: 9, color: done ? 'var(--green)' : current ? 'var(--amber)' : 'var(--text-muted)' }}>{label}</div>
+                  </div>
+                );
+              })}
             </div>
+
             {shiftWarning && (
               <div style={{
-                background: shiftWarning.includes('加班') || shiftWarning.includes('晚到') ? 'var(--amber-glow)' : 'var(--red-glow)',
-                border: `1px solid ${shiftWarning.includes('加班') || shiftWarning.includes('晚到') ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                background: shiftWarning.includes('加班') || shiftWarning.includes('遲到') ? 'var(--amber-glow)' : 'var(--red-glow)',
+                border: `1px solid ${shiftWarning.includes('加班') || shiftWarning.includes('遲到') ? 'rgba(245,158,11,0.3)' : 'rgba(239,68,68,0.3)'}`,
                 borderRadius: 8, padding: '8px 12px', marginBottom: 10,
-                fontSize: 12, color: shiftWarning.includes('加班') || shiftWarning.includes('晚到') ? 'var(--amber)' : 'var(--red)',
+                fontSize: 12, color: shiftWarning.includes('加班') || shiftWarning.includes('遲到') ? 'var(--amber)' : 'var(--red)',
                 textAlign: 'left',
               }}>{shiftWarning}</div>
             )}
+
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="備註（選填）" style={{ marginBottom: 10, fontSize: 13 }} />
             <button onClick={handlePunch} disabled={punchLoading || networkStatus.checking || !canPunch} style={{
               width: '100%', padding: 13, borderRadius: 10, fontSize: 15, fontWeight: 700,
-              background: !canPunch ? 'var(--bg-elevated)' : isClockedIn ? 'var(--red-glow)' : 'var(--amber)',
-              color: !canPunch ? 'var(--text-muted)' : isClockedIn ? 'var(--red)' : '#000',
-              border: isClockedIn && canPunch ? '1px solid rgba(239,68,68,0.4)' : 'none',
+              background: !canPunch ? 'var(--bg-elevated)' : punchState.nextType === 'out' ? 'var(--red-glow)' : 'var(--amber)',
+              color: !canPunch ? 'var(--text-muted)' : punchState.nextType === 'out' ? 'var(--red)' : '#000',
+              border: punchState.nextType === 'out' && canPunch ? '1px solid rgba(239,68,68,0.4)' : 'none',
               cursor: canPunch ? 'pointer' : 'not-allowed',
             }}>
-              {punchLoading ? '處理中...' : networkStatus.checking ? '偵測網路中...' : !networkStatus.allowed ? '需連接辦公室 WiFi' : !todayShift ? '今日未排班' : isClockedIn ? '⏹ 下班打卡' : '▶ 上班打卡'}
+              {punchLoading ? '處理中...' :
+               networkStatus.checking ? '偵測網路中...' :
+               !networkStatus.allowed ? '需連接辦公室 WiFi' :
+               !todayShifts.shift1 && !todayShifts.shift2 ? '今日未排班' :
+               !punchState.nextType ? '今日打卡完成 ✓' :
+               punchState.nextType === 'in' ? `▶ ${punchState.label}` : `⏹ ${punchState.label}`}
             </button>
           </div>
 
@@ -268,7 +324,7 @@ export default function EmployeeDashboard() {
               <div className="table-wrapper">
                 <table>
                   <thead>
-                    <tr><th>日期</th><th>班別</th><th>上班</th><th>下班</th><th>工時</th><th>薪資</th></tr>
+                    <tr><th>日期</th><th>班</th><th>上班</th><th>下班</th><th>狀態</th><th>工時</th></tr>
                   </thead>
                   <tbody>
                     {dailyRecords.map(r => (
@@ -277,8 +333,15 @@ export default function EmployeeDashboard() {
                         <td style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>{r.shiftId || '--'}</td>
                         <td style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 11 }}>{r.inTime || '--'}</td>
                         <td style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontSize: 11 }}>{r.outTime || '--'}</td>
+                        <td style={{ fontSize: 10 }}>
+                          {r.lateMinutes > 0
+                            ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>遲到 {r.lateMinutes}分</span>
+                            : r.inTime
+                            ? <span style={{ color: 'var(--green)' }}>準時</span>
+                            : '--'}
+                          {r.overtimeHours > 0 && <span style={{ color: 'var(--amber)', marginLeft: 4 }}>+加班</span>}
+                        </td>
                         <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.hours > 0 ? fmtHours(r.hours) : '--'}</td>
-                        <td style={{ fontFamily: 'var(--mono)', color: 'var(--amber)', fontSize: 11 }}>{r.salary > 0 ? fmtMoney(r.salary) : '--'}</td>
                       </tr>
                     ))}
                   </tbody>
