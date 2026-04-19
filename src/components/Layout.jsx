@@ -1,258 +1,99 @@
-// src/components/Layout.jsx
-import React, { useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { signOut } from 'firebase/auth';
-import { auth } from '../firebase';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Layout({ children }) {
-  const { profile } = useAuth();
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [collapsed, setCollapsed] = useState(false);
+  const { profile, logout } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-  const isAdmin = profile?.role === 'admin';
-
-  const navItems = [
-    ...(isAdmin ? [{ path: '/admin', icon: GridIcon, label: '管理後台' }] : []),
-    { path: '/employee', icon: ClockIcon, label: '打卡介面' },
-  ];
-
-  async function handleLogout() {
-    await signOut(auth);
-    navigate('/login');
-  }
-
-  const W = collapsed ? 64 : 220;
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth >= 768) setSidebarOpen(false);
+    }
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      {/* Sidebar */}
-      <aside
-        style={{
-          width: W,
-          minWidth: W,
-          background: 'var(--bg-surface)',
-          borderRight: '1px solid var(--border)',
-          display: 'flex',
-          flexDirection: 'column',
-          transition: 'width 0.2s ease',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Brand */}
-        <div
-          style={{
-            padding: '20px 0',
-            borderBottom: '1px solid var(--border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingInline: 16,
-          }}
-        >
-          {!collapsed && (
-            <div>
-              <div
-                style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: 'var(--amber)',
-                  letterSpacing: '0.1em',
-                }}
-              >
-                TIMECLOCK
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: 'var(--text-muted)',
-                  fontFamily: 'var(--mono)',
-                  letterSpacing: '0.06em',
-                }}
-              >
-                v1.0
-              </div>
-            </div>
-          )}
-          <button
-            onClick={() => setCollapsed((c) => !c)}
-            style={{
-              background: 'var(--bg-elevated)',
-              border: '1px solid var(--border)',
-              color: 'var(--text-secondary)',
-              padding: 6,
-              borderRadius: 6,
-              display: 'flex',
-            }}
-          >
-            <MenuIcon />
-          </button>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg-base)', position: 'relative' }}>
+
+      {/* 手機版遮罩 */}
+      {sidebarOpen && (
+        <div onClick={() => setSidebarOpen(false)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+          zIndex: 40, backdropFilter: 'blur(2px)',
+        }} />
+      )}
+
+      {/* 側邊欄 */}
+      <aside style={{
+        width: 220, flexShrink: 0, borderRight: '1px solid var(--border)',
+        background: 'var(--bg-elevated)', display: 'flex', flexDirection: 'column',
+        padding: '20px 12px',
+        // 手機版
+        position: window.innerWidth < 768 ? 'fixed' : 'relative',
+        top: 0, left: 0, bottom: 0, zIndex: 50,
+        transform: window.innerWidth < 768 ? (sidebarOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
+        transition: 'transform 0.25s ease',
+      }}>
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.1em' }}>TIMECLOCK</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>v1.0</div>
         </div>
 
-        {/* Nav */}
-        <nav
-          style={{
-            flex: 1,
-            padding: '12px 8px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 4,
-          }}
-        >
-          {navItems.map((item) => {
-            const active = location.pathname === item.path;
-            return (
-              <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: collapsed ? '10px' : '10px 12px',
-                  borderRadius: 8,
-                  background: active ? 'var(--amber-glow)' : 'transparent',
-                  color: active ? 'var(--amber)' : 'var(--text-secondary)',
-                  border: active
-                    ? '1px solid rgba(245,158,11,0.3)'
-                    : '1px solid transparent',
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  width: '100%',
-                  textAlign: 'left',
-                  fontSize: 13,
-                  fontWeight: 500,
-                  transition: 'all 0.15s',
-                }}
-              >
-                <item.icon />
-                {!collapsed && <span>{item.label}</span>}
-              </button>
-            );
-          })}
+        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+            borderRadius: 8, background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.25)',
+            fontSize: 13, fontWeight: 500, color: 'var(--amber)',
+          }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
+            打卡介面
+          </div>
         </nav>
 
-        {/* User + Logout */}
-        <div
-          style={{ padding: '12px 8px', borderTop: '1px solid var(--border)' }}
-        >
-          {!collapsed && (
-            <div
-              style={{
-                padding: '8px 12px',
-                marginBottom: 8,
-                borderRadius: 8,
-                background: 'var(--bg-elevated)',
-              }}
-            >
-              <div
-                style={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: 'var(--text-primary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {profile?.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 10,
-                  color: 'var(--text-muted)',
-                  fontFamily: 'var(--mono)',
-                  marginTop: 2,
-                }}
-              >
-                {profile?.role === 'admin' ? 'ADMIN' : 'EMPLOYEE'}
-              </div>
-            </div>
-          )}
-          <button
-            onClick={handleLogout}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              padding: collapsed ? 10 : '9px 12px',
-              borderRadius: 8,
-              background: 'transparent',
-              color: 'var(--text-muted)',
-              border: '1px solid transparent',
-              width: '100%',
-              fontSize: 13,
-              justifyContent: collapsed ? 'center' : 'flex-start',
-            }}
-          >
-            <LogoutIcon />
-            {!collapsed && <span>登出</span>}
+        <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{profile?.name}</div>
+          <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 14 }}>
+            {profile?.role?.toUpperCase()}
+          </div>
+          <button onClick={logout} style={{
+            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+            padding: '8px 10px', borderRadius: 7, fontSize: 12, fontWeight: 500,
+            color: 'var(--text-muted)', background: 'transparent', border: 'none', cursor: 'pointer',
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            登出
           </button>
         </div>
       </aside>
 
-      {/* Main content */}
-      <main style={{ flex: 1, overflow: 'auto', background: 'var(--bg-base)' }}>
+      {/* 主內容 */}
+      <main style={{ flex: 1, overflow: 'auto', minWidth: 0 }}>
+        {/* 手機版頂部導覽列 */}
+        {window.innerWidth < 768 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px',
+            borderBottom: '1px solid var(--border)', background: 'var(--bg-elevated)',
+            position: 'sticky', top: 0, zIndex: 30,
+          }}>
+            <button onClick={() => setSidebarOpen(true)} style={{
+              background: 'var(--bg-base)', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '6px 10px', cursor: 'pointer', color: 'var(--text-primary)',
+            }}>
+              ☰
+            </button>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.08em' }}>
+              TIMECLOCK
+            </div>
+          </div>
+        )}
         {children}
       </main>
     </div>
   );
 }
-
-const MenuIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-  >
-    <line x1="3" y1="6" x2="21" y2="6" />
-    <line x1="3" y1="12" x2="21" y2="12" />
-    <line x1="3" y1="18" x2="21" y2="18" />
-  </svg>
-);
-const ClockIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-  >
-    <circle cx="12" cy="12" r="10" />
-    <polyline points="12 6 12 12 16 14" />
-  </svg>
-);
-const GridIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-  >
-    <rect x="3" y="3" width="7" height="7" />
-    <rect x="14" y="3" width="7" height="7" />
-    <rect x="3" y="14" width="7" height="7" />
-    <rect x="14" y="14" width="7" height="7" />
-  </svg>
-);
-const LogoutIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-  >
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-    <polyline points="16 17 21 12 16 7" />
-    <line x1="21" y1="12" x2="9" y2="12" />
-  </svg>
-);
