@@ -60,8 +60,7 @@ export default function EmployeeDashboard() {
         if (shiftId) {
           const shiftSnap = await getDoc(doc(db, 'settings', 'shifts'));
           const shifts = shiftSnap.exists() ? (shiftSnap.data().list || []) : [];
-          const shift = shifts.find(s => s.id === shiftId);
-          setTodayShift(shift || null);
+          setTodayShift(shifts.find(s => s.id === shiftId) || null);
         } else {
           setTodayShift(null);
         }
@@ -75,7 +74,7 @@ export default function EmployeeDashboard() {
     setLoading(true);
     try {
       const start = Timestamp.fromDate(startOfMonth(parseISO(selectedMonth + '-01')));
-      const end   = Timestamp.fromDate(endOfMonth(parseISO(selectedMonth + '-01')));
+      const end = Timestamp.fromDate(endOfMonth(parseISO(selectedMonth + '-01')));
       const q = query(
         collection(db, 'punches'),
         where('uid', '==', user.uid),
@@ -92,8 +91,8 @@ export default function EmployeeDashboard() {
   useEffect(() => { fetchPunches(); }, [fetchPunches]);
 
   const todayPunches = punches.filter(p => isToday(p.timestamp?.toDate?.() || new Date(0)));
-  const lastPunch    = todayPunches[todayPunches.length - 1];
-  const isClockedIn  = lastPunch?.type === 'in';
+  const lastPunch = todayPunches[todayPunches.length - 1];
+  const isClockedIn = lastPunch?.type === 'in';
 
   function validatePunchTime(type) {
     if (!todayShift) return { ok: false, msg: '今日未排班，無法打卡' };
@@ -104,10 +103,9 @@ export default function EmployeeDashboard() {
     const endMins = eh * 60 + em;
     if (type === 'in') {
       if (nowMins < startMins - 15) {
-        const diff = startMins - 15 - nowMins;
-        return { ok: false, msg: `距離可打卡時間還有 ${diff} 分鐘（${todayShift.start} 上班，提早 15 分鐘可打卡）` };
+        return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘` };
       }
-      if (nowMins > endMins) return { ok: false, msg: `已超過下班時間（${todayShift.end}），無法打上班卡` };
+      if (nowMins > endMins) return { ok: false, msg: `已超過下班時間（${todayShift.end}）` };
       const lateMin = Math.max(0, nowMins - startMins);
       return { ok: true, msg: lateMin > 0 ? `晚到 ${lateMin} 分鐘` : '', shiftId: todayShift.id };
     } else {
@@ -120,7 +118,7 @@ export default function EmployeeDashboard() {
 
   async function handlePunch() {
     if (!user || punchLoading) return;
-    if (!networkStatus.allowed) { alert(networkStatus.reason || '請連接辦公室 WiFi 才能打卡'); return; }
+    if (!networkStatus.allowed) { alert(networkStatus.reason || '請連接辦公室 WiFi'); return; }
     const type = isClockedIn ? 'out' : 'in';
     const validation = validatePunchTime(type);
     if (!validation.ok) { setShiftWarning(validation.msg); return; }
@@ -143,13 +141,11 @@ export default function EmployeeDashboard() {
     setPunchLoading(false);
   }
 
-  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary } =
-    calcSalaryFromPunches(punches, profile);
-
+  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, profile);
   const canPunch = networkStatus.allowed && todayShift;
 
   return (
-    <div style={{ padding: '12px', maxWidth: 960, margin: '0 auto' }} className="fade-in">
+    <div style={{ padding: '12px', maxWidth: 600, margin: '0 auto' }} className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 600 }}>員工介面</h1>
@@ -182,14 +178,12 @@ export default function EmployeeDashboard() {
                   width: 40, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center',
                   justifyContent: 'center', fontSize: 18, fontWeight: 700, fontFamily: 'var(--mono)',
                   background: todayShift.color + '22', color: todayShift.color,
-                  border: `1px solid ${todayShift.color}44`, flexShrink: 0,
+                  border: `1px solid ${todayShift.color}44`,
                 }}>{todayShift.id}</div>
                 <div>
                   <div style={{ fontWeight: 600, fontSize: 14, color: todayShift.color }}>{todayShift.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>
-                    {todayShift.start} → {todayShift.end}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 2 }}>可提早 15 分鐘打卡</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>{todayShift.start} → {todayShift.end}</div>
+                  <div style={{ fontSize: 11, color: 'var(--amber)' }}>可提早 15 分鐘打卡</div>
                 </div>
               </div>
             ) : (
@@ -200,15 +194,11 @@ export default function EmployeeDashboard() {
           {/* WiFi 狀態 */}
           <div className="card" style={{
             padding: '10px 14px',
-            border: networkStatus.checking ? '1px solid var(--border)' :
-                    networkStatus.allowed ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(239,68,68,0.35)',
-            background: networkStatus.checking ? 'var(--bg-card)' :
-                        networkStatus.allowed ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
+            border: networkStatus.checking ? '1px solid var(--border)' : networkStatus.allowed ? '1px solid rgba(34,197,94,0.35)' : '1px solid rgba(239,68,68,0.35)',
+            background: networkStatus.checking ? 'var(--bg-card)' : networkStatus.allowed ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 12, fontWeight: 600, color: networkStatus.checking ? 'var(--text-muted)' : networkStatus.allowed ? 'var(--green)' : 'var(--red)' }}>
-                {networkStatus.checking ? '📡 偵測網路中...' : networkStatus.allowed ? `✓ WiFi 驗證通過 · ${networkStatus.matchedNetwork}` : '✗ WiFi 驗證失敗'}
-              </span>
+            <div style={{ fontSize: 12, fontWeight: 600, color: networkStatus.checking ? 'var(--text-muted)' : networkStatus.allowed ? 'var(--green)' : 'var(--red)' }}>
+              {networkStatus.checking ? '📡 偵測網路中...' : networkStatus.allowed ? `✓ WiFi 驗證通過 · ${networkStatus.matchedNetwork}` : '✗ WiFi 驗證失敗'}
             </div>
             {!networkStatus.allowed && !networkStatus.checking && (
               <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{networkStatus.reason}</div>
@@ -225,17 +215,11 @@ export default function EmployeeDashboard() {
             </div>
             <div style={{ margin: '12px 0', display: 'flex', justifyContent: 'center' }}>
               {isClockedIn ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--green)', display: 'inline-block' }} />
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)' }}>
-                    上班中 · {lastPunch?.timestamp?.toDate ? format(lastPunch.timestamp.toDate(), 'HH:mm') : '--'}
-                  </span>
-                </div>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--green)' }}>
+                  ● 上班中 · {lastPunch?.timestamp?.toDate ? format(lastPunch.timestamp.toDate(), 'HH:mm') : '--'}
+                </span>
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--text-muted)', display: 'inline-block' }} />
-                  <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)' }}>尚未打卡</span>
-                </div>
+                <span style={{ fontFamily: 'var(--mono)', fontSize: 11, color: 'var(--text-muted)' }}>○ 尚未打卡</span>
               )}
             </div>
             {shiftWarning && (
@@ -248,20 +232,14 @@ export default function EmployeeDashboard() {
               }}>{shiftWarning}</div>
             )}
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="備註（選填）" style={{ marginBottom: 10, fontSize: 13 }} />
-            <button onClick={handlePunch}
-              disabled={punchLoading || networkStatus.checking || !canPunch}
-              style={{
-                width: '100%', padding: 13, borderRadius: 10, fontSize: 15, fontWeight: 700,
-                background: !canPunch ? 'var(--bg-elevated)' : isClockedIn ? 'var(--red-glow)' : 'var(--amber)',
-                color: !canPunch ? 'var(--text-muted)' : isClockedIn ? 'var(--red)' : '#000',
-                border: isClockedIn && canPunch ? '1px solid rgba(239,68,68,0.4)' : 'none',
-                cursor: canPunch ? 'pointer' : 'not-allowed',
-              }}>
-              {punchLoading ? '處理中...' :
-               networkStatus.checking ? '偵測網路中...' :
-               !networkStatus.allowed ? '需連接辦公室 WiFi' :
-               !todayShift ? '今日未排班' :
-               isClockedIn ? '⏹ 下班打卡' : '▶ 上班打卡'}
+            <button onClick={handlePunch} disabled={punchLoading || networkStatus.checking || !canPunch} style={{
+              width: '100%', padding: 13, borderRadius: 10, fontSize: 15, fontWeight: 700,
+              background: !canPunch ? 'var(--bg-elevated)' : isClockedIn ? 'var(--red-glow)' : 'var(--amber)',
+              color: !canPunch ? 'var(--text-muted)' : isClockedIn ? 'var(--red)' : '#000',
+              border: isClockedIn && canPunch ? '1px solid rgba(239,68,68,0.4)' : 'none',
+              cursor: canPunch ? 'pointer' : 'not-allowed',
+            }}>
+              {punchLoading ? '處理中...' : networkStatus.checking ? '偵測網路中...' : !networkStatus.allowed ? '需連接辦公室 WiFi' : !todayShift ? '今日未排班' : isClockedIn ? '⏹ 下班打卡' : '▶ 上班打卡'}
             </button>
           </div>
 
@@ -312,7 +290,7 @@ export default function EmployeeDashboard() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 2 }}>{selectedMonth} 薪資估計</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fmtHours(totalHours)}{totalOvertimeHours > 0 ? ` · 加班 ${fmtHours(totalOvertimeHours)}` : ''}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fmtHours(totalHours)}</div>
                   </div>
                   <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 600, color: 'var(--amber)' }}>{fmtMoney(totalSalary)}</div>
                 </div>
