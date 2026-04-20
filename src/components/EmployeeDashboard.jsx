@@ -16,7 +16,9 @@ const TABS = ['打卡', '請假'];
 
 export default function EmployeeDashboard() {
   const { user, profile } = useAuth();
-  const { activePage, setActivePage } = useNav();
+  const navCtx = useNav();
+  const activePage = navCtx?.activePage || 'punch';
+  const setActivePage = navCtx?.setActivePage || (() => {});
   const [now, setNow] = useState(new Date());
   const [punches, setPunches] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -362,17 +364,7 @@ export default function EmployeeDashboard() {
                 </table>
               </div>
             )}
-            {dailyRecords.length > 0 && (
-              <div className="card" style={{ background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.25)', marginTop: 10 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 2 }}>{selectedMonth} 薪資估計</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{fmtHours(totalHours)}</div>
-                  </div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 600, color: 'var(--amber)' }}>{fmtMoney(totalSalary)}</div>
-                </div>
-              </div>
-            )}
+
           </div>
       </div>
     </div>
