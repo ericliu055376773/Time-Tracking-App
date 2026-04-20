@@ -18,7 +18,7 @@ const TABS = ['薪資計算', '打卡紀錄', '請假審核', '員工管理', 'W
 const EMPTY_ADD = {
   name: '', empId: '', pin: '', email: '',
   role: 'employee', payType: 'hourly',
-  hourlyRate: 180, monthlySalary: 30000, overtimeEnabled: false,
+  hourlyRate: 180, monthlySalary: 30000, mealAllowance: 0, overtimeEnabled: false,
 };
 
 export default function AdminDashboard() {
@@ -90,7 +90,7 @@ export default function AdminDashboard() {
       await setDoc(doc(db, 'users', cred.user.uid), {
         name: addForm.name.trim(), empId: addForm.empId.trim(), email,
         role: addForm.role, payType: addForm.payType,
-        hourlyRate: Number(addForm.hourlyRate), monthlySalary: Number(addForm.monthlySalary),
+        hourlyRate: Number(addForm.hourlyRate), monthlySalary: Number(addForm.monthlySalary), mealAllowance: Number(addForm.mealAllowance||0),
         overtimeEnabled: addForm.overtimeEnabled, createdAt: serverTimestamp(),
       });
       setShowAddModal(false);
@@ -108,7 +108,7 @@ export default function AdminDashboard() {
       await updateDoc(doc(db, 'users', editForm.id), {
         name: editForm.name, empId: editForm.empId || '',
         payType: editForm.payType, hourlyRate: Number(editForm.hourlyRate),
-        monthlySalary: Number(editForm.monthlySalary), overtimeEnabled: !!editForm.overtimeEnabled,
+        monthlySalary: Number(editForm.monthlySalary), mealAllowance: Number(editForm.mealAllowance||0), overtimeEnabled: !!editForm.overtimeEnabled,
       });
       setEditingEmp(null);
       await fetchAll();
@@ -228,7 +228,7 @@ export default function AdminDashboard() {
             </label>
             {addForm.payType === 'hourly'
               ? <label style={labelStyle}><span>時薪（元）</span><input type="number" value={addForm.hourlyRate} onChange={e => setAddForm(f => ({ ...f, hourlyRate: e.target.value }))} /></label>
-              : <label style={labelStyle}><span>月薪（元）</span><input type="number" value={addForm.monthlySalary} onChange={e => setAddForm(f => ({ ...f, monthlySalary: e.target.value }))} /></label>
+              : <><label style={labelStyle}><span>月薪（元）</span><input type="number" value={addForm.monthlySalary} onChange={e => setAddForm(f => ({ ...f, monthlySalary: e.target.value }))} /></label><label style={labelStyle}><span>月餐費（元）</span><input type="number" value={addForm.mealAllowance||0} onChange={e => setAddForm(f => ({ ...f, mealAllowance: e.target.value }))} /></label></>
             }
             <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
               <input type="checkbox" checked={addForm.overtimeEnabled} onChange={e => setAddForm(f => ({ ...f, overtimeEnabled: e.target.checked }))} style={{ width: 'auto' }} />
@@ -283,26 +283,17 @@ function RecordsTab({ punches, employees }) {
   return (
     <div className="table-wrapper">
       <table>
-        <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>狀態</th><th>備註</th></tr></thead>
+        <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>備註</th></tr></thead>
         <tbody>
           {[...punches].sort((a,b) => b.timestamp?.toMillis() - a.timestamp?.toMillis()).map(p => (
             <tr key={p.id}>
               <td style={{ fontWeight: 500 }}>{empMap[p.uid] || p.userName}</td>
               <td><span className={`badge ${p.type === 'in' ? 'badge-green' : 'badge-red'}`}>{p.type === 'in' ? '▶ 上班' : '⏹ 下班'}</span></td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{p.timestamp?.toDate() ? format(p.timestamp.toDate(), 'MM/dd HH:mm:ss') : '--'}</td>
-              <td style={{ fontSize: 12 }}>
-                {p.type === 'in' && p.lateMinutes > 0
-                  ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>⚠️ 遲到 {p.lateMinutes} 分鐘</span>
-                  : p.type === 'in'
-                  ? <span style={{ color: 'var(--green)' }}>準時</span>
-                  : p.overtimeMinutes > 0
-                  ? <span style={{ color: 'var(--amber)' }}>加班 {p.overtimeMinutes} 分鐘</span>
-                  : '--'}
-              </td>
               <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note || '--'}</td>
             </tr>
           ))}
-          {punches.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
+          {punches.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
         </tbody>
       </table>
     </div>
@@ -326,7 +317,7 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
               </label>
               {editForm.payType === 'hourly'
                 ? <label style={{ ...labelStyle, flex: '1 1 100px' }}><span>時薪</span><input type="number" value={editForm.hourlyRate||0} onChange={e => onEditChange('hourlyRate', e.target.value)} /></label>
-                : <label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月薪</span><input type="number" value={editForm.monthlySalary||0} onChange={e => onEditChange('monthlySalary', e.target.value)} /></label>
+                : <><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月薪</span><input type="number" value={editForm.monthlySalary||0} onChange={e => onEditChange('monthlySalary', e.target.value)} /></label><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月餐費</span><input type="number" value={editForm.mealAllowance||0} onChange={e => onEditChange('mealAllowance', e.target.value)} /></label></>
               }
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', paddingBottom: 1 }}>
                 <input type="checkbox" checked={!!editForm.overtimeEnabled} onChange={e => onEditChange('overtimeEnabled', e.target.checked)} style={{ width: 'auto' }} />
