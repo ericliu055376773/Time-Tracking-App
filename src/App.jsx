@@ -45,23 +45,27 @@ function AppRoutes() {
     );
   }
 
+  if (profile.role === 'admin') {
+    return (
+      <Layout>
+        <Routes>
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/employee" element={<EmployeeDashboard />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Routes>
+      </Layout>
+    );
+  }
+
   return (
-    <Layout>
-      <Routes>
-        {profile.role === 'admin' ? (
-          <>
-            <Route path="/admin" element={<AdminDashboard />} />
-            <Route path="/employee" element={<EmployeeDashboard />} />
-            <Route path="*" element={<Navigate to="/admin" replace />} />
-          </>
-        ) : (
-          <NavProvider>
-            <Route path="/employee" element={<EmployeeDashboard />} />
-            <Route path="*" element={<Navigate to="/employee" replace />} />
-          </NavProvider>
-        )}
-      </Routes>
-    </Layout>
+    <NavProvider>
+      <Layout>
+        <Routes>
+          <Route path="/employee" element={<EmployeeDashboard />} />
+          <Route path="*" element={<Navigate to="/employee" replace />} />
+        </Routes>
+      </Layout>
+    </NavProvider>
   );
 }
 
