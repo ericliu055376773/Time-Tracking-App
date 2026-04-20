@@ -110,7 +110,8 @@ export default function SalaryRuleManager() {
         ) : (
           <Row>
             <span style={rowLabel}>底薪</span>
-            <span style={rowMuted}>{rules.baseSalaryNote || '依員工各別設定'} 元 ÷</span>
+            <span style={{ fontSize: 14, color: '#ffffff', fontWeight: 500 }}>{rules.baseSalaryNote || '依員工各別設定'}</span>
+            <span style={rowMuted}>元 ÷</span>
             <span style={rowVal}>{rules.baseSalaryDivisor}</span>
             <span style={rowMuted}>天</span>
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>＝</span>
