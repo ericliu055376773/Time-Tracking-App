@@ -112,7 +112,11 @@ export default function SalaryRuleManager() {
             <span style={rowLabel}>底薪</span>
             <span style={rowMuted}>{rules.baseSalaryNote || '依員工各別設定'} 元 ÷</span>
             <span style={rowVal}>{rules.baseSalaryDivisor}</span>
-            <span style={rowMuted}>天 × 出勤天數</span>
+            <span style={rowMuted}>天</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>＝</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              見下方員工日薪一覽
+            </span>
           </Row>
         )}
       </RuleCard>
@@ -133,7 +137,11 @@ export default function SalaryRuleManager() {
             <span style={rowLabel}>＋ 餐費</span>
             <span style={rowMuted}>{rules.mealNote || '依員工各別設定'} 元 ÷</span>
             <span style={rowVal}>{rules.mealAllowanceDivisor}</span>
-            <span style={rowMuted}>天 × 出勤天數</span>
+            <span style={rowMuted}>天</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>＝</span>
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              見下方員工日薪一覽
+            </span>
           </Row>
         )}
       </RuleCard>
