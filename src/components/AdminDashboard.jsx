@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   collection, query, getDocs, where, orderBy,
-  doc, updateDoc, setDoc, getDoc, Timestamp, serverTimestamp
+  doc, updateDoc, setDoc, getDoc, addDoc, Timestamp, serverTimestamp
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../firebase';
@@ -35,6 +35,10 @@ export default function AdminDashboard() {
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
   const [positions, setPositions] = useState([]);
+  const [showMakePunch, setShowMakePunch] = useState(false);
+  const [makePunchForm, setMakePunchForm] = useState({ uid: '', date: '', time: '', type: 'in', shiftId: '', note: '' });
+  const [makePunchLoading, setMakePunchLoading] = useState(false);
+  const [makePunchError, setMakePunchError] = useState('');
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -120,6 +124,40 @@ export default function AdminDashboard() {
     } catch (err) { alert('更新失敗：' + err.message); }
   }
 
+  async function handleMakePunch() {
+    setMakePunchError('');
+    const { uid, date, time, type, shiftId, note } = makePunchForm;
+    if (!uid) return setMakePunchError('請選擇員工');
+    if (!date) return setMakePunchError('請選擇日期');
+    if (!time) return setMakePunchError('請輸入時間');
+    setMakePunchLoading(true);
+    try {
+      const emp = employees.find(e => e.id === uid);
+      const dt = new Date(`${date}T${time}:00`);
+      await addDoc(collection(db, 'punches'), {
+        uid,
+        userName: emp?.name || '',
+        type,
+        timestamp: Timestamp.fromDate(dt),
+        date,
+        note: note.trim() || '管理員補打卡',
+        shiftId: shiftId.trim(),
+        session: 1,
+        lateMinutes: 0,
+        overtimeMinutes: 0,
+        networkName: '管理員補打',
+        publicIP: '',
+        isMakeup: true,
+      });
+      setShowMakePunch(false);
+      setMakePunchForm({ uid: '', date: '', time: '', type: 'in', shiftId: '', note: '' });
+      await fetchAll();
+    } catch (err) {
+      setMakePunchError('補打失敗：' + err.message);
+    }
+    setMakePunchLoading(false);
+  }
+
   return (
     <div style={{ padding: '32px 40px' }} className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
@@ -129,6 +167,9 @@ export default function AdminDashboard() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width: 155, fontSize: 13 }} />
+          <button onClick={() => { setMakePunchForm({ uid: '', date: '', time: '', type: 'in', shiftId: '', note: '' }); setMakePunchError(''); setShowMakePunch(true); }} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+            🕐 補打卡
+          </button>
           <button onClick={() => setShowAddModal(true)} style={{ padding: '9px 16px', background: 'var(--amber)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
             + 新增員工
           </button>
@@ -184,6 +225,53 @@ export default function AdminDashboard() {
           onCancel={() => setEditingEmp(null)}
           positions={positions}
         />
+      )}
+
+      {showMakePunch && (
+        <Modal title="🕐 補打卡" onClose={() => setShowMakePunch(false)}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <label style={labelStyle}>
+              <span>員工</span>
+              <select value={makePunchForm.uid} onChange={e => setMakePunchForm(f => ({ ...f, uid: e.target.value }))}>
+                <option value="">— 請選擇員工 —</option>
+                {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+              </select>
+            </label>
+            <label style={labelStyle}>
+              <span>打卡類型</span>
+              <select value={makePunchForm.type} onChange={e => setMakePunchForm(f => ({ ...f, type: e.target.value }))}>
+                <option value="in">▶ 上班打卡</option>
+                <option value="out">⏹ 下班打卡</option>
+              </select>
+            </label>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <label style={{ ...labelStyle, flex: 1 }}>
+                <span>日期</span>
+                <input type="date" value={makePunchForm.date} onChange={e => setMakePunchForm(f => ({ ...f, date: e.target.value }))} />
+              </label>
+              <label style={{ ...labelStyle, flex: 1 }}>
+                <span>時間</span>
+                <input type="time" value={makePunchForm.time} onChange={e => setMakePunchForm(f => ({ ...f, time: e.target.value }))} />
+              </label>
+            </div>
+            <label style={labelStyle}>
+              <span>班別代號（選填，例如：F）</span>
+              <input value={makePunchForm.shiftId} onChange={e => setMakePunchForm(f => ({ ...f, shiftId: e.target.value }))} placeholder="例如：F、A、Z" />
+            </label>
+            <label style={labelStyle}>
+              <span>備註</span>
+              <input value={makePunchForm.note} onChange={e => setMakePunchForm(f => ({ ...f, note: e.target.value }))} placeholder="例如：忘記打卡，管理員補登" />
+            </label>
+            {makePunchError && (
+              <div style={{ background: 'var(--red-glow)', border: '1px solid rgba(239,68,68,0.3)', padding: '10px 14px', borderRadius: 6, color: 'var(--red)', fontSize: 13 }}>
+                {makePunchError}
+              </div>
+            )}
+            <button onClick={handleMakePunch} disabled={makePunchLoading} style={{ padding: 12, background: 'var(--amber)', color: '#000', borderRadius: 8, fontWeight: 700, fontSize: 14 }}>
+              {makePunchLoading ? '補打中...' : '確認補打卡'}
+            </button>
+          </div>
+        </Modal>
       )}
 
       {showAddModal && (
