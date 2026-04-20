@@ -1,18 +1,20 @@
 // src/components/SalaryRuleManager.jsx
 import React, { useState, useEffect } from 'react';
-import { doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 
 const DEFAULT_RULES = {
+  baseSalary: 0,
+  baseSalaryDivisor: 30,
+  mealAllowance: 0,
+  mealAllowanceDivisor: 30,
+  laborInsurance: 0,
+  healthInsurance: 0,
   fullAttendanceBonus: 2000,
   fullAttendanceConditions: { noLate: true, noLeave: true, noMissedPunch: true },
-  missedPunchLimit: 0,        // 幾次未打卡會失去全勤（0 = 1次就失去）
-  lateGracePeriod: 0,         // 遲到幾分鐘以內不扣錢（寬限）
+  missedPunchLimit: 0,
+  lateGracePeriod: 0,
   lateDeductionPerMinute: 0,
-  baseSalaryDivisor: 30,
-  mealAllowanceDivisor: 30,
-  baseSalaryNote: '',
-  mealNote: '',
   customItems: [],
 };
 
@@ -21,11 +23,11 @@ function newId() { return `item_${idCounter++}`; }
 
 export default function SalaryRuleManager() {
   const [rules, setRules] = useState(null);
-  const [employees, setEmployees] = useState([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [editing, setEditing] = useState({
-    base: false, meal: false, fullAtt: false, late: false, miss: false, grace: false,
+    base: false, meal: false, labor: false, health: false,
+    fullAtt: false, miss: false, grace: false, late: false,
   });
   const [showAddForm, setShowAddForm] = useState(false);
   const [newItem, setNewItem] = useState({ name: '', type: 'allowance', amount: '', per: 'month', note: '' });
@@ -34,12 +36,8 @@ export default function SalaryRuleManager() {
 
   useEffect(() => {
     async function load() {
-      const [snap, empSnap] = await Promise.all([
-        getDoc(doc(db, 'settings', 'salaryRules')),
-        getDocs(collection(db, 'users')),
-      ]);
+      const snap = await getDoc(doc(db, 'settings', 'salaryRules'));
       setRules(snap.exists() ? { ...DEFAULT_RULES, ...snap.data() } : { ...DEFAULT_RULES });
-      setEmployees(empSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(e => e.role === 'employee'));
     }
     load();
   }, []);
@@ -78,8 +76,10 @@ export default function SalaryRuleManager() {
   if (!rules) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>;
 
   const perLabel = { month: '每月固定', day: '每出勤日' };
-  const monthlyEmps = employees.filter(e => e.payType === 'monthly');
-  const hourlyEmps = employees.filter(e => e.payType === 'hourly');
+
+  // 計算每日合計（預覽用）
+  const dailyBase = rules.baseSalaryDivisor > 0 ? rules.baseSalary / rules.baseSalaryDivisor : 0;
+  const dailyMeal = rules.mealAllowanceDivisor > 0 ? rules.mealAllowance / rules.mealAllowanceDivisor : 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -93,7 +93,6 @@ export default function SalaryRuleManager() {
         }}>{saving ? '儲存中...' : '💾 儲存設定'}</button>
       </div>
 
-      {/* ══ 月薪制公式 ══ */}
       <SectionHeader>📐 月薪制公式設定</SectionHeader>
 
       {/* 底薪 */}
@@ -101,23 +100,20 @@ export default function SalaryRuleManager() {
         {editing.base ? (
           <Row>
             <span style={labelTxt}>底薪</span>
-            <input value={rules.baseSalaryNote || ''} onChange={e => update('baseSalaryNote', e.target.value)}
-              placeholder="例：依員工各別設定" style={{ ...editInput, width: 200 }} />
+            <NumInput value={rules.baseSalary} onChange={v => update('baseSalary', v)} width={110} />
             <span style={labelTxt}>元 ÷</span>
-            <input type="number" value={rules.baseSalaryDivisor} onChange={e => update('baseSalaryDivisor', Number(e.target.value))} style={{ ...editInput, width: 70, textAlign: 'center' }} />
+            <NumInput value={rules.baseSalaryDivisor} onChange={v => update('baseSalaryDivisor', v)} width={60} />
             <span style={labelTxt}>天 × 出勤天數</span>
           </Row>
         ) : (
           <Row>
             <span style={rowLabel}>底薪</span>
-            <span style={{ fontSize: 14, color: '#ffffff', fontWeight: 500 }}>{rules.baseSalaryNote || '依員工各別設定'}</span>
+            <span style={valWhite}>{rules.baseSalary.toLocaleString()}</span>
             <span style={rowMuted}>元 ÷</span>
             <span style={rowVal}>{rules.baseSalaryDivisor}</span>
             <span style={rowMuted}>天</span>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>＝</span>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-              見下方員工日薪一覽
-            </span>
+            <span style={eqSign}>＝</span>
+            <span style={resultVal}>${Math.round(dailyBase).toLocaleString()} / 天</span>
           </Row>
         )}
       </RuleCard>
@@ -127,22 +123,20 @@ export default function SalaryRuleManager() {
         {editing.meal ? (
           <Row>
             <span style={labelTxt}>＋ 餐費</span>
-            <input value={rules.mealNote || ''} onChange={e => update('mealNote', e.target.value)}
-              placeholder="例：依員工各別設定" style={{ ...editInput, width: 200 }} />
+            <NumInput value={rules.mealAllowance} onChange={v => update('mealAllowance', v)} width={110} />
             <span style={labelTxt}>元 ÷</span>
-            <input type="number" value={rules.mealAllowanceDivisor} onChange={e => update('mealAllowanceDivisor', Number(e.target.value))} style={{ ...editInput, width: 70, textAlign: 'center' }} />
+            <NumInput value={rules.mealAllowanceDivisor} onChange={v => update('mealAllowanceDivisor', v)} width={60} />
             <span style={labelTxt}>天 × 出勤天數</span>
           </Row>
         ) : (
           <Row>
             <span style={rowLabel}>＋ 餐費</span>
-            <span style={rowMuted}>{rules.mealNote || '依員工各別設定'} 元 ÷</span>
+            <span style={valWhite}>{rules.mealAllowance.toLocaleString()}</span>
+            <span style={rowMuted}>元 ÷</span>
             <span style={rowVal}>{rules.mealAllowanceDivisor}</span>
             <span style={rowMuted}>天</span>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>＝</span>
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: 'var(--text-muted)', fontStyle: 'italic' }}>
-              見下方員工日薪一覽
-            </span>
+            <span style={eqSign}>＝</span>
+            <span style={resultVal}>${Math.round(dailyMeal).toLocaleString()} / 天</span>
           </Row>
         )}
       </RuleCard>
@@ -153,8 +147,8 @@ export default function SalaryRuleManager() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Row>
               <span style={{ ...labelTxt, color: 'var(--green)' }}>＋ 全勤獎金</span>
-              <input type="number" value={rules.fullAttendanceBonus} onChange={e => update('fullAttendanceBonus', Number(e.target.value))} style={{ ...editInput, width: 90, textAlign: 'center' }} />
-              <span style={labelTxt}>元</span>
+              <NumInput value={rules.fullAttendanceBonus} onChange={v => update('fullAttendanceBonus', v)} width={100} />
+              <span style={labelTxt}>元 / 月</span>
             </Row>
             <Row>
               <span style={labelTxt}>達標條件：</span>
@@ -170,7 +164,10 @@ export default function SalaryRuleManager() {
         ) : (
           <Row>
             <span style={{ ...rowLabel, color: 'var(--green)' }}>＋ 全勤獎金</span>
-            <span style={{ ...rowVal, color: 'var(--green)' }}>${rules.fullAttendanceBonus.toLocaleString()}</span>
+            <span style={valWhite}>{rules.fullAttendanceBonus.toLocaleString()}</span>
+            <span style={rowMuted}>元 / 月</span>
+            <span style={eqSign}>＝</span>
+            <span style={{ ...resultVal, color: 'var(--green)' }}>${rules.fullAttendanceBonus.toLocaleString()}</span>
             <span style={rowMuted}>（條件：{[
               rules.fullAttendanceConditions?.noLate && '無遲到',
               rules.fullAttendanceConditions?.noLeave && '無請假',
@@ -180,18 +177,56 @@ export default function SalaryRuleManager() {
         )}
       </RuleCard>
 
-      {/* 未打卡次數上限 */}
+      {/* 勞保扣款 */}
+      <RuleCard color="var(--red)" isEditing={editing.labor} onToggleEdit={() => toggleEdit('labor')}>
+        {editing.labor ? (
+          <Row>
+            <span style={{ ...labelTxt, color: 'var(--red)' }}>－ 勞保扣款</span>
+            <NumInput value={rules.laborInsurance} onChange={v => update('laborInsurance', v)} width={110} />
+            <span style={labelTxt}>元 / 月</span>
+          </Row>
+        ) : (
+          <Row>
+            <span style={{ ...rowLabel, color: 'var(--red)' }}>－ 勞保扣款</span>
+            <span style={valWhite}>{rules.laborInsurance.toLocaleString()}</span>
+            <span style={rowMuted}>元 / 月</span>
+            <span style={eqSign}>＝</span>
+            <span style={{ ...resultVal, color: 'var(--red)' }}>-${rules.laborInsurance.toLocaleString()}</span>
+          </Row>
+        )}
+      </RuleCard>
+
+      {/* 健保扣款 */}
+      <RuleCard color="var(--red)" isEditing={editing.health} onToggleEdit={() => toggleEdit('health')}>
+        {editing.health ? (
+          <Row>
+            <span style={{ ...labelTxt, color: 'var(--red)' }}>－ 健保扣款</span>
+            <NumInput value={rules.healthInsurance} onChange={v => update('healthInsurance', v)} width={110} />
+            <span style={labelTxt}>元 / 月</span>
+          </Row>
+        ) : (
+          <Row>
+            <span style={{ ...rowLabel, color: 'var(--red)' }}>－ 健保扣款</span>
+            <span style={valWhite}>{rules.healthInsurance.toLocaleString()}</span>
+            <span style={rowMuted}>元 / 月</span>
+            <span style={eqSign}>＝</span>
+            <span style={{ ...resultVal, color: 'var(--red)' }}>-${rules.healthInsurance.toLocaleString()}</span>
+          </Row>
+        )}
+      </RuleCard>
+
+      {/* 未打卡上限 */}
       <RuleCard color="var(--amber)" isEditing={editing.miss} onToggleEdit={() => toggleEdit('miss')}>
         {editing.miss ? (
           <Row>
             <span style={{ ...labelTxt, color: 'var(--amber)' }}>未打卡</span>
-            <input type="number" min="0" value={rules.missedPunchLimit} onChange={e => update('missedPunchLimit', Number(e.target.value))} style={{ ...editInput, width: 70, textAlign: 'center' }} />
+            <NumInput value={rules.missedPunchLimit} onChange={v => update('missedPunchLimit', v)} width={60} />
             <span style={labelTxt}>次以上則失去全勤（0 = 1 次就失去）</span>
           </Row>
         ) : (
           <Row>
             <span style={{ ...rowLabel, color: 'var(--amber)' }}>未打卡上限</span>
-            <span style={{ ...rowVal, color: 'var(--amber)' }}>{rules.missedPunchLimit}</span>
+            <span style={valWhite}>{rules.missedPunchLimit}</span>
             <span style={rowMuted}>次以上失去全勤</span>
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
               {rules.missedPunchLimit === 0 ? '（1 次就失去全勤）' : `（${rules.missedPunchLimit + 1} 次才失去全勤）`}
@@ -205,16 +240,16 @@ export default function SalaryRuleManager() {
         {editing.grace ? (
           <Row>
             <span style={{ ...labelTxt, color: 'var(--amber)' }}>遲到寬限</span>
-            <input type="number" min="0" value={rules.lateGracePeriod} onChange={e => update('lateGracePeriod', Number(e.target.value))} style={{ ...editInput, width: 70, textAlign: 'center' }} />
-            <span style={labelTxt}>分鐘以內不扣錢、不算遲到（0 = 無寬限）</span>
+            <NumInput value={rules.lateGracePeriod} onChange={v => update('lateGracePeriod', v)} width={60} />
+            <span style={labelTxt}>分鐘以內不扣錢不算遲到（0 = 無寬限）</span>
           </Row>
         ) : (
           <Row>
             <span style={{ ...rowLabel, color: 'var(--amber)' }}>遲到寬限</span>
-            <span style={{ ...rowVal, color: 'var(--amber)' }}>{rules.lateGracePeriod}</span>
-            <span style={rowMuted}>分鐘以內不扣錢</span>
+            <span style={valWhite}>{rules.lateGracePeriod}</span>
+            <span style={rowMuted}>分鐘以內視為準時</span>
             <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-              {rules.lateGracePeriod === 0 ? '（無寬限）' : `（遲到 ${rules.lateGracePeriod} 分鐘內視為準時）`}
+              {rules.lateGracePeriod === 0 ? '（無寬限）' : ''}
             </span>
           </Row>
         )}
@@ -225,14 +260,15 @@ export default function SalaryRuleManager() {
         {editing.late ? (
           <Row>
             <span style={{ ...labelTxt, color: 'var(--red)' }}>－ 遲到扣款</span>
-            <input type="number" value={rules.lateDeductionPerMinute} onChange={e => update('lateDeductionPerMinute', Number(e.target.value))} style={{ ...editInput, width: 80, textAlign: 'center' }} />
-            <span style={labelTxt}>元 × 遲到分鐘數（超過寬限後）（0 = 不扣）</span>
+            <NumInput value={rules.lateDeductionPerMinute} onChange={v => update('lateDeductionPerMinute', v)} width={80} />
+            <span style={labelTxt}>元 × 遲到分鐘數（超過寬限後，0 = 不扣）</span>
           </Row>
         ) : (
           <Row>
             <span style={{ ...rowLabel, color: 'var(--red)' }}>－ 遲到扣款</span>
-            <span style={{ ...rowVal, color: 'var(--red)' }}>{rules.lateDeductionPerMinute}</span>
-            <span style={rowMuted}>元 × 分鐘{rules.lateDeductionPerMinute === 0 ? '（不扣款）' : '（超過寬限後）'}</span>
+            <span style={valWhite}>{rules.lateDeductionPerMinute}</span>
+            <span style={rowMuted}>元 × 遲到分鐘數</span>
+            {rules.lateDeductionPerMinute === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不扣款）</span>}
           </Row>
         )}
       </RuleCard>
@@ -257,8 +293,12 @@ export default function SalaryRuleManager() {
           ) : (
             <Row>
               <span style={{ ...rowLabel, color: item.type === 'allowance' ? 'var(--green)' : 'var(--red)' }}>{item.type === 'allowance' ? '＋' : '－'} {item.name}</span>
-              <span style={{ ...rowVal, color: item.type === 'allowance' ? 'var(--green)' : 'var(--red)' }}>${item.amount.toLocaleString()}</span>
+              <span style={valWhite}>{item.amount.toLocaleString()}</span>
               <span style={rowMuted}>{perLabel[item.per]}</span>
+              <span style={eqSign}>＝</span>
+              <span style={{ ...resultVal, color: item.type === 'allowance' ? 'var(--green)' : 'var(--red)' }}>
+                {item.type === 'allowance' ? '+' : '-'}${item.amount.toLocaleString()}
+              </span>
               {item.note && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（{item.note}）</span>}
             </Row>
           )}
@@ -272,8 +312,20 @@ export default function SalaryRuleManager() {
       </div>
 
       {/* 實領 + 新增按鈕 */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 4px' }}>
-        <span style={{ fontSize: 16, fontWeight: 700 }}>＝ 實領薪資</span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '4px 0 4px' }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>＝ 實領薪資（預估）</div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: 'var(--amber)' }}>
+            ${Math.round(
+              (dailyBase + dailyMeal) * 30 +
+              rules.fullAttendanceBonus -
+              rules.laborInsurance -
+              rules.healthInsurance +
+              rules.customItems.reduce((s, i) => s + (i.type === 'allowance' ? i.amount : -i.amount), 0)
+            ).toLocaleString()}
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 8 }}>（全勤、出勤30天）</span>
+          </div>
+        </div>
         <button onClick={() => { setShowAddForm(true); setFormError(''); }}
           style={{ padding: '8px 18px', background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', fontWeight: 600 }}>
           ＋ 新增加扣項目
@@ -298,72 +350,6 @@ export default function SalaryRuleManager() {
           </div>
         </div>
       )}
-
-      {/* ══ 員工日薪一覽 ══ */}
-      <div style={{ marginTop: 12 }}>
-        <SectionHeader>👥 員工每日薪資一覽</SectionHeader>
-
-        {/* 月薪制 */}
-        <div style={{ marginBottom: 20 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.08em', marginBottom: 10 }}>
-            月薪制員工（底薪 + 餐費 ÷ {rules.baseSalaryDivisor} 天）
-          </div>
-          {monthlyEmps.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '12px 0' }}>暫無月薪制員工</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-              {monthlyEmps.map(emp => {
-                const dailyBase = (emp.monthlySalary || 0) / (rules.baseSalaryDivisor || 30);
-                const dailyMeal = (emp.mealAllowance || 0) / (rules.mealAllowanceDivisor || 30);
-                const dailyTotal = dailyBase + dailyMeal;
-                return (
-                  <div key={emp.id} className="card" style={{ padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{emp.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
-                      底薪 ${(emp.monthlySalary||0).toLocaleString()} ÷ {rules.baseSalaryDivisor} = <span style={{ color: 'var(--text-primary)' }}>${Math.round(dailyBase).toLocaleString()}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                      餐費 ${(emp.mealAllowance||0).toLocaleString()} ÷ {rules.mealAllowanceDivisor} = <span style={{ color: 'var(--text-primary)' }}>${Math.round(dailyMeal).toLocaleString()}</span>
-                    </div>
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>每日合計</span>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 17, fontWeight: 700, color: 'var(--amber)' }}>${Math.round(dailyTotal).toLocaleString()}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* 時薪制 */}
-        <div>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--blue, #60a5fa)', letterSpacing: '0.08em', marginBottom: 10 }}>
-            時薪制員工（時薪 × 8 小時）
-          </div>
-          {hourlyEmps.length === 0 ? (
-            <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: '12px 0' }}>暫無時薪制員工</div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10 }}>
-              {hourlyEmps.map(emp => {
-                const dailyTotal = (emp.hourlyRate || 0) * 8;
-                return (
-                  <div key={emp.id} className="card" style={{ padding: '14px 16px' }}>
-                    <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 8 }}>{emp.name}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 8 }}>
-                      時薪 ${emp.hourlyRate || 0} × 8h = <span style={{ color: 'var(--text-primary)' }}>${dailyTotal.toLocaleString()}</span>
-                    </div>
-                    <div style={{ borderTop: '1px solid var(--border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>每日合計</span>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 17, fontWeight: 700, color: '#60a5fa' }}>${dailyTotal.toLocaleString()}</span>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
 
     </div>
   );
@@ -393,6 +379,15 @@ function RuleCard({ color, isEditing, onToggleEdit, onDelete, children }) {
   );
 }
 
+function NumInput({ value, onChange, width = 100 }) {
+  return (
+    <input type="number" min="0" value={value}
+      onChange={e => onChange(Number(e.target.value))}
+      style={{ ...editInput, width, textAlign: 'center', color: '#fff', fontWeight: 700 }}
+    />
+  );
+}
+
 function Row({ children }) {
   return <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{children}</div>;
 }
@@ -405,10 +400,13 @@ function FieldLabel({ label, children }) {
   );
 }
 
-const editInput = { padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none', minWidth: 100 };
+const editInput = { padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none', minWidth: 60 };
 const rowLabel = { fontWeight: 700, fontSize: 14, minWidth: 90 };
 const rowVal = { fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700 };
 const rowMuted = { fontSize: 13, color: 'var(--text-muted)' };
 const labelTxt = { fontSize: 13, color: 'var(--text-muted)' };
+const valWhite = { fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: '#ffffff' };
+const eqSign = { fontSize: 14, color: 'var(--text-muted)', margin: '0 2px' };
+const resultVal = { fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: 'var(--amber)' };
 const btnGreen = { padding: '8px 18px', background: 'var(--green)', color: '#000', borderRadius: 7, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer' };
 const btnCancel = { padding: '8px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, cursor: 'pointer' };
