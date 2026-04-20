@@ -16,7 +16,7 @@ import PositionManager from './PositionManager';
 const TABS = ['薪資計算', '打卡紀錄', '請假審核', '員工管理', 'WiFi 設定', '職位管理', '班別設定', '排班管理'];
 
 const EMPTY_ADD = {
-  name: '', empId: '', pin: '', email: '',
+  name: '', positionId: '', pin: '', email: '',
   role: 'employee', payType: 'hourly',
   hourlyRate: 180, monthlySalary: 30000, mealAllowance: 0, overtimeEnabled: false,
 };
@@ -34,6 +34,7 @@ export default function AdminDashboard() {
   const [addForm, setAddForm] = useState(EMPTY_ADD);
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState('');
+  const [positions, setPositions] = useState([]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -52,6 +53,8 @@ export default function AdminDashboard() {
       setAllPunches(pSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       const lSnap = await getDocs(query(collection(db, 'leaves'), orderBy('createdAt', 'desc')));
       setAllLeaves(lSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const posSnap = await getDoc(doc(db, 'settings', 'positions'));
+      setPositions(posSnap.exists() ? (posSnap.data().list || []) : []);
     } catch (err) { console.error(err); }
     setLoading(false);
   }, [selectedMonth]);
@@ -74,7 +77,6 @@ export default function AdminDashboard() {
   async function handleAddEmployee() {
     setAddError('');
     if (!addForm.name.trim()) return setAddError('請輸入姓名');
-    if (!addForm.empId.trim()) return setAddError('請輸入員工編號');
     if (addForm.role === 'employee') {
       if (!/^\d{10}$/.test(addForm.pin)) return setAddError('PIN 碼必須是 10 位數字');
     } else {
@@ -83,13 +85,15 @@ export default function AdminDashboard() {
     }
     setAddLoading(true);
     try {
+      const slug = addForm.name.trim().toLowerCase().replace(/\s+/g,'') + Date.now();
       const email = addForm.role === 'employee'
-        ? `${addForm.empId.trim().toLowerCase()}@internal.timeclock`
+        ? `${slug}@internal.timeclock`
         : addForm.email.trim();
       const cred = await createUserWithEmailAndPassword(auth, email, addForm.pin);
       await setDoc(doc(db, 'users', cred.user.uid), {
-        name: addForm.name.trim(), empId: addForm.empId.trim(), email,
+        name: addForm.name.trim(), email,
         role: addForm.role, payType: addForm.payType,
+        positionId: addForm.positionId || '',
         hourlyRate: Number(addForm.hourlyRate), monthlySalary: Number(addForm.monthlySalary), mealAllowance: Number(addForm.mealAllowance||0),
         overtimeEnabled: addForm.overtimeEnabled, createdAt: serverTimestamp(),
       });
@@ -106,7 +110,8 @@ export default function AdminDashboard() {
   async function handleUpdateEmployee() {
     try {
       await updateDoc(doc(db, 'users', editForm.id), {
-        name: editForm.name, empId: editForm.empId || '',
+        name: editForm.name,
+        positionId: editForm.positionId || '',
         payType: editForm.payType, hourlyRate: Number(editForm.hourlyRate),
         monthlySalary: Number(editForm.monthlySalary), mealAllowance: Number(editForm.mealAllowance||0), overtimeEnabled: !!editForm.overtimeEnabled,
       });
@@ -156,7 +161,7 @@ export default function AdminDashboard() {
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>載入中...</div>
       ) : activeTab === '薪資計算' ? (
-        <SalaryTab summaries={salarySummaries} month={selectedMonth} />
+        <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />
       ) : activeTab === '打卡紀錄' ? (
         <RecordsTab punches={allPunches} employees={employees} />
       ) : activeTab === '請假審核' ? (
@@ -177,6 +182,7 @@ export default function AdminDashboard() {
           onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))}
           onSave={handleUpdateEmployee}
           onCancel={() => setEditingEmp(null)}
+          positions={positions}
         />
       )}
 
@@ -195,8 +201,11 @@ export default function AdminDashboard() {
               <input value={addForm.name} onChange={e => setAddForm(f => ({ ...f, name: e.target.value }))} placeholder="例如：林小明" />
             </label>
             <label style={labelStyle}>
-              <span>員工編號</span>
-              <input value={addForm.empId} onChange={e => setAddForm(f => ({ ...f, empId: e.target.value }))} placeholder="例如：E001" />
+              <span>職位</span>
+              <select value={addForm.positionId||''} onChange={e => setAddForm(f => ({ ...f, positionId: e.target.value }))}>
+                <option value="">— 未設定 —</option>
+                {positions.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
             </label>
             {addForm.role === 'employee' ? (
               <label style={labelStyle}>
@@ -249,20 +258,21 @@ export default function AdminDashboard() {
   );
 }
 
-function SalaryTab({ summaries, month }) {
+function SalaryTab({ summaries, month, positions }) {
+  const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
     <div className="table-wrapper">
       <table>
         <thead>
-          <tr><th>員工編號</th><th>姓名</th><th>薪資類型</th><th>費率</th><th>工時</th><th>加班</th><th>請假扣薪</th><th>實發薪資</th><th>薪資單</th></tr>
+          <tr><th>姓名</th><th>職位</th><th>薪資類型</th><th>費率</th><th>工時</th><th>加班</th><th>請假扣薪</th><th>實發薪資</th><th>薪資單</th></tr>
         </thead>
         <tbody>
           {summaries.length === 0 ? (
             <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>尚無員工資料</td></tr>
           ) : summaries.map(emp => (
             <tr key={emp.id}>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--text-secondary)' }}>{emp.empId || '--'}</td>
               <td style={{ fontWeight: 500 }}>{emp.name}</td>
+              <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{emp.positionId ? (posMap[emp.positionId]?.name || '--') : '--'}</td>
               <td><span className={`badge ${emp.payType === 'hourly' ? 'badge-amber' : 'badge-muted'}`}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</span></td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(emp.monthlySalary||0).toLocaleString()}/mo`}</td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{emp.totalHours > 0 ? fmtHours(emp.totalHours) : <span style={{ color: 'var(--text-muted)' }}>0h</span>}</td>
@@ -300,59 +310,70 @@ function RecordsTab({ punches, employees }) {
   );
 }
 
-function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, onSave, onCancel }) {
+function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, onSave, onCancel, positions }) {
+  const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {employees.length === 0 && <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>尚無員工，點右上角「新增員工」開始建立</div>}
-      {employees.map(emp => (
-        <div key={emp.id} className="card" style={{ padding: '16px 20px' }}>
-          {editingEmp === emp.id ? (
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <label style={{ ...labelStyle, flex: '1 1 130px' }}><span>姓名</span><input value={editForm.name||''} onChange={e => onEditChange('name', e.target.value)} /></label>
-              <label style={{ ...labelStyle, flex: '1 1 110px' }}><span>員工編號</span><input value={editForm.empId||''} onChange={e => onEditChange('empId', e.target.value)} /></label>
-              <label style={{ ...labelStyle, flex: '1 1 110px' }}><span>薪資類型</span>
-                <select value={editForm.payType||'hourly'} onChange={e => onEditChange('payType', e.target.value)}>
-                  <option value="hourly">時薪制</option><option value="monthly">月薪制</option>
-                </select>
-              </label>
-              {editForm.payType === 'hourly'
-                ? <label style={{ ...labelStyle, flex: '1 1 100px' }}><span>時薪</span><input type="number" value={editForm.hourlyRate||0} onChange={e => onEditChange('hourlyRate', e.target.value)} /></label>
-                : <><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月薪</span><input type="number" value={editForm.monthlySalary||0} onChange={e => onEditChange('monthlySalary', e.target.value)} /></label><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月餐費</span><input type="number" value={editForm.mealAllowance||0} onChange={e => onEditChange('mealAllowance', e.target.value)} /></label></>
-              }
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', paddingBottom: 1 }}>
-                <input type="checkbox" checked={!!editForm.overtimeEnabled} onChange={e => onEditChange('overtimeEnabled', e.target.checked)} style={{ width: 'auto' }} />
-                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>加班費</span>
-              </label>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={onSave} style={{ padding: '9px 16px', background: 'var(--green)', color: '#000', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>儲存</button>
-                <button onClick={onCancel} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>取消</button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{ width: 38, height: 38, borderRadius: '50%', background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mono)', fontSize: 16, color: 'var(--amber)' }}>
-                  {emp.name?.[0]?.toUpperCase()}
+      {employees.map(emp => {
+        const empPos = posMap[emp.positionId];
+        return (
+          <div key={emp.id} className="card" style={{ padding: '16px 20px' }}>
+            {editingEmp === emp.id ? (
+              <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <label style={{ ...labelStyle, flex: '1 1 130px' }}><span>姓名</span><input value={editForm.name||''} onChange={e => onEditChange('name', e.target.value)} /></label>
+                <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>職位</span>
+                  <select value={editForm.positionId||''} onChange={e => onEditChange('positionId', e.target.value)}>
+                    <option value="">— 未設定 —</option>
+                    {(positions||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </label>
+                <label style={{ ...labelStyle, flex: '1 1 110px' }}><span>薪資類型</span>
+                  <select value={editForm.payType||'hourly'} onChange={e => onEditChange('payType', e.target.value)}>
+                    <option value="hourly">時薪制</option><option value="monthly">月薪制</option>
+                  </select>
+                </label>
+                {editForm.payType === 'hourly'
+                  ? <label style={{ ...labelStyle, flex: '1 1 100px' }}><span>時薪</span><input type="number" value={editForm.hourlyRate||0} onChange={e => onEditChange('hourlyRate', e.target.value)} /></label>
+                  : <><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月薪</span><input type="number" value={editForm.monthlySalary||0} onChange={e => onEditChange('monthlySalary', e.target.value)} /></label><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月餐費</span><input type="number" value={editForm.mealAllowance||0} onChange={e => onEditChange('mealAllowance', e.target.value)} /></label></>
+                }
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', paddingBottom: 1 }}>
+                  <input type="checkbox" checked={!!editForm.overtimeEnabled} onChange={e => onEditChange('overtimeEnabled', e.target.checked)} style={{ width: 'auto' }} />
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>加班費</span>
+                </label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={onSave} style={{ padding: '9px 16px', background: 'var(--green)', color: '#000', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>儲存</button>
+                  <button onClick={onCancel} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>取消</button>
                 </div>
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    {emp.name}
-                    {emp.overtimeEnabled && <span className="badge badge-amber" style={{ fontSize: 10 }}>加班費</span>}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{ width: 38, height: 38, borderRadius: '50%', background: empPos ? empPos.color+'22' : 'var(--amber-glow)', border: `1px solid ${empPos ? empPos.color+'44' : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mono)', fontSize: 16, color: empPos ? empPos.color : 'var(--amber)' }}>
+                    {emp.name?.[0]?.toUpperCase()}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>編號：{emp.empId || '未設定'}</div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {emp.name}
+                      {emp.overtimeEnabled && <span className="badge badge-amber" style={{ fontSize: 10 }}>加班費</span>}
+                    </div>
+                    <div style={{ fontSize: 11, color: empPos ? empPos.color : 'var(--text-muted)', marginTop: 2 }}>
+                      {empPos ? empPos.name : '未設定職位'}
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--amber)' }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(emp.monthlySalary||0).toLocaleString()}/mo`}</div>
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</div>
+                  </div>
+                  <button onClick={() => onEdit(emp)} style={{ padding: '7px 14px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}>編輯</button>
                 </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--amber)' }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(emp.monthlySalary||0).toLocaleString()}/mo`}</div>
-                  <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</div>
-                </div>
-                <button onClick={() => onEdit(emp)} style={{ padding: '7px 14px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}>編輯</button>
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
