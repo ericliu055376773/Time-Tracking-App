@@ -1,15 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { collection, query, where, orderBy, getDocs, Timestamp } from 'firebase/firestore';
-import { db } from '../firebase';
-import { calcSalaryFromPunches, fmtMoney, fmtHours } from '../hooks/useSalaryCalc';
-import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { useNav } from '../contexts/NavContext';
 
 export default function Layout({ children }) {
-  const { user, profile, logout } = useAuth();
+  const { profile, logout } = useAuth();
+  const nav = useNav(); // null for admin
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-  const [stats, setStats] = useState(null);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
@@ -18,28 +15,18 @@ export default function Layout({ children }) {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // 員工才抓本月統計
-  useEffect(() => {
-    if (!user || profile?.role !== 'employee') return;
-    async function fetchStats() {
-      try {
-        const month = format(new Date(), 'yyyy-MM');
-        const start = Timestamp.fromDate(startOfMonth(parseISO(month + '-01')));
-        const end   = Timestamp.fromDate(endOfMonth(parseISO(month + '-01')));
-        const snap = await getDocs(query(
-          collection(db, 'punches'),
-          where('uid', '==', user.uid),
-          where('timestamp', '>=', start),
-          where('timestamp', '<=', end),
-          orderBy('timestamp', 'asc')
-        ));
-        const punches = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        const { totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = calcSalaryFromPunches(punches, profile);
-        setStats({ totalHours, totalOvertimeHours, totalSalary, salaryBreakdown, month });
-      } catch (err) { console.error(err); }
-    }
-    fetchStats();
-  }, [user, profile]);
+  const isEmployee = profile?.role === 'employee';
+
+  const NAV_ITEMS = [
+    {
+      id: 'punch', label: '打卡介面',
+      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>,
+    },
+    {
+      id: 'stats', label: '本月統計',
+      icon: <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>,
+    },
+  ];
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-base)' }}>
@@ -61,6 +48,12 @@ export default function Layout({ children }) {
           <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.08em' }}>
             TIMECLOCK
           </div>
+          {/* 手機版頁面標題 */}
+          {isEmployee && nav && (
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginLeft: 4 }}>
+              {NAV_ITEMS.find(n => n.id === nav.activePage)?.label}
+            </div>
+          )}
         </div>
       )}
 
@@ -81,11 +74,10 @@ export default function Layout({ children }) {
             background: 'var(--bg-elevated)',
             display: 'flex', flexDirection: 'column',
             padding: '20px 12px',
-            ...(isMobile ? {
-              position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 300,
-            } : {}),
+            ...(isMobile ? { position: 'fixed', top: 0, left: 0, bottom: 0, zIndex: 300 } : {}),
           }}>
-            <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            {/* Logo */}
+            <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.1em' }}>TIMECLOCK</div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>v1.0</div>
@@ -98,77 +90,49 @@ export default function Layout({ children }) {
               )}
             </div>
 
-            <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {/* 打卡介面連結 */}
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
-                borderRadius: 8, background: 'var(--amber-glow)',
-                border: '1px solid rgba(245,158,11,0.25)',
-                fontSize: 13, fontWeight: 500, color: 'var(--amber)',
-              }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-                </svg>
-                打卡介面
-              </div>
-
-              {/* 本月統計卡片（僅員工顯示） */}
-              {profile?.role === 'employee' && stats && (
+            {/* 導航項目 */}
+            <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {isEmployee && nav ? (
+                // 員工：顯示打卡介面 / 本月統計 兩個導航
+                NAV_ITEMS.map(item => {
+                  const active = nav.activePage === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => { nav.setActivePage(item.id); setSidebarOpen(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '10px 12px', borderRadius: 8, width: '100%',
+                        fontSize: 13, fontWeight: active ? 600 : 400,
+                        background: active ? 'var(--amber-glow)' : 'transparent',
+                        border: active ? '1px solid rgba(245,158,11,0.25)' : '1px solid transparent',
+                        color: active ? 'var(--amber)' : 'var(--text-secondary)',
+                        cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+                      }}
+                    >
+                      {item.icon}
+                      {item.label}
+                    </button>
+                  );
+                })
+              ) : (
+                // 管理員：原有單一項目
                 <div style={{
-                  marginTop: 8,
-                  borderRadius: 10,
-                  border: '1px solid var(--border)',
-                  overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                  borderRadius: 8, background: 'var(--amber-glow)',
+                  border: '1px solid rgba(245,158,11,0.25)',
+                  fontSize: 13, fontWeight: 500, color: 'var(--amber)',
                 }}>
-                  {/* 標題列 */}
-                  <div style={{
-                    background: 'var(--bg-base)',
-                    padding: '8px 12px',
-                    fontSize: 10, fontWeight: 700, letterSpacing: '0.08em',
-                    color: 'var(--text-muted)',
-                    borderBottom: '1px solid var(--border)',
-                  }}>
-                    本月統計 · {stats.month}
-                  </div>
-
-                  <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <SideStatRow label="工作時數" value={fmtHours(stats.totalHours)} />
-                    {stats.totalOvertimeHours > 0 && (
-                      <SideStatRow label="加班時數" value={fmtHours(stats.totalOvertimeHours)} color="var(--amber)" />
-                    )}
-                    <SideStatRow label="薪資類型" value={profile?.payType === 'hourly' ? `時薪 $${profile?.hourlyRate}` : '月薪制'} />
-
-                    {/* 月薪制：顯示全勤狀況 */}
-                    {profile?.payType === 'monthly' && stats.salaryBreakdown && (
-                      <div style={{
-                        fontSize: 10,
-                        padding: '5px 8px',
-                        borderRadius: 6,
-                        background: stats.salaryBreakdown.hasFullAttendance ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
-                        color: stats.salaryBreakdown.hasFullAttendance ? 'var(--green)' : 'var(--red)',
-                        border: `1px solid ${stats.salaryBreakdown.hasFullAttendance ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.25)'}`,
-                      }}>
-                        {stats.salaryBreakdown.hasFullAttendance ? '✓ 全勤達標' : `✗ 全勤未達標`}
-                      </div>
-                    )}
-
-                    {/* 預估薪資 */}
-                    <div style={{
-                      marginTop: 2,
-                      paddingTop: 8,
-                      borderTop: '1px solid var(--border)',
-                      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    }}>
-                      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>預估薪資</span>
-                      <span style={{ fontFamily: 'var(--mono)', fontSize: 15, fontWeight: 700, color: 'var(--amber)' }}>
-                        {fmtMoney(stats.totalSalary)}
-                      </span>
-                    </div>
-                  </div>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+                    <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                  </svg>
+                  管理後台
                 </div>
               )}
             </nav>
 
+            {/* 使用者資訊 + 登出 */}
             <div style={{ borderTop: '1px solid var(--border)', paddingTop: 14, marginTop: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 2 }}>{profile?.name}</div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 14 }}>
@@ -195,17 +159,6 @@ export default function Layout({ children }) {
           {children}
         </main>
       </div>
-    </div>
-  );
-}
-
-function SideStatRow({ label, value, color }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-      <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{label}</span>
-      <span style={{ fontFamily: 'var(--mono)', fontSize: 12, fontWeight: 600, color: color || 'var(--text-primary)' }}>
-        {value}
-      </span>
     </div>
   );
 }
