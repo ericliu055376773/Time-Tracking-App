@@ -5,6 +5,7 @@ import Login from './components/Login';
 import EmployeeDashboard from './components/EmployeeDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import Layout from './components/Layout';
+import { NavProvider } from './contexts/NavContext';
 
 function AppRoutes() {
   const { user, profile, loading } = useAuth();
@@ -54,10 +55,10 @@ function AppRoutes() {
             <Route path="*" element={<Navigate to="/admin" replace />} />
           </>
         ) : (
-          <>
+          <NavProvider>
             <Route path="/employee" element={<EmployeeDashboard />} />
             <Route path="*" element={<Navigate to="/employee" replace />} />
-          </>
+          </NavProvider>
         )}
       </Routes>
     </Layout>
