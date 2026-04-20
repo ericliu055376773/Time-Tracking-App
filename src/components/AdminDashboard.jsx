@@ -3,7 +3,7 @@ import {
   collection, query, getDocs, where, orderBy,
   doc, updateDoc, setDoc, getDoc, addDoc, Timestamp, serverTimestamp
 } from 'firebase/firestore';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
 import { db, auth } from '../firebase';
 import { calcSalaryFromPunches, fmtMoney, fmtHours } from '../hooks/useSalaryCalc';
 import { getNetworkInfo, isAllowedNetwork } from '../hooks/useNetworkCheck';
@@ -13,7 +13,7 @@ import ShiftManager from './ShiftManager';
 import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import PositionManager from './PositionManager';
-const TABS = ['薪資計算', '打卡紀錄', '請假審核', '員工管理', 'WiFi 設定', '職位管理', '班別設定', '排班管理'];
+const TABS = ['薪資結算', '打卡紀錄', '員工查詢', '請假審核', '員工管理', 'WiFi 設定', '職位管理', '班別設定', '排班管理'];
 
 const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
@@ -27,7 +27,8 @@ export default function AdminDashboard() {
   const [allLeaves, setAllLeaves] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('薪資計算');
+  const [activeTab, setActiveTab] = useState('薪資結算');
+  const [queryEmpId, setQueryEmpId] = useState('');
   const [editingEmp, setEditingEmp] = useState(null);
   const [editForm, setEditForm] = useState({});
   const [showAddModal, setShowAddModal] = useState(false);
@@ -119,6 +120,15 @@ export default function AdminDashboard() {
         payType: editForm.payType, hourlyRate: Number(editForm.hourlyRate),
         monthlySalary: Number(editForm.monthlySalary), mealAllowance: Number(editForm.mealAllowance||0), overtimeEnabled: !!editForm.overtimeEnabled,
       });
+      // 修改密碼
+      if (editForm.newPassword && editForm.newPassword.length >= 6) {
+        try {
+          const { getFunctions, httpsCallable } = await import('firebase/functions');
+          // 使用 Firebase Admin 更新密碼（需要 Cloud Function）
+          // 簡易方式：直接用 updatePassword（需要該用戶最近登入）
+          alert('密碼更新功能需透過 Firebase Console 操作，或聯繫系統管理員');
+        } catch {}
+      }
       setEditingEmp(null);
       await fetchAll();
     } catch (err) { alert('更新失敗：' + err.message); }
@@ -163,7 +173,7 @@ export default function AdminDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 600 }}>管理後台</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>薪資計算 · 請假審核 · 員工管理</p>
+          <p style={{ color: 'var(--text-muted)', fontSize: 13, marginTop: 4 }}>薪資結算 · 請假審核 · 員工管理</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width: 155, fontSize: 13 }} />
@@ -201,10 +211,12 @@ export default function AdminDashboard() {
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>載入中...</div>
-      ) : activeTab === '薪資計算' ? (
+      ) : activeTab === '薪資結算' ? (
         <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />
       ) : activeTab === '打卡紀錄' ? (
         <RecordsTab punches={allPunches} employees={employees} />
+      ) : activeTab === '員工查詢' ? (
+        <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} />
       ) : activeTab === '請假審核' ? (
         <LeaveManager isAdmin={true} />
 ) : activeTab === 'WiFi 設定' ? (
@@ -381,17 +393,27 @@ function RecordsTab({ punches, employees }) {
   return (
     <div className="table-wrapper">
       <table>
-        <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>備註</th></tr></thead>
+        <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>狀態</th><th>備註</th></tr></thead>
         <tbody>
           {[...punches].sort((a,b) => b.timestamp?.toMillis() - a.timestamp?.toMillis()).map(p => (
             <tr key={p.id}>
               <td style={{ fontWeight: 500 }}>{empMap[p.uid] || p.userName}</td>
               <td><span className={`badge ${p.type === 'in' ? 'badge-green' : 'badge-red'}`}>{p.type === 'in' ? '▶ 上班' : '⏹ 下班'}</span></td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{p.timestamp?.toDate() ? format(p.timestamp.toDate(), 'MM/dd HH:mm:ss') : '--'}</td>
+              <td style={{ fontSize: 12 }}>
+                {p.type === 'in' && p.lateMinutes > 0
+                  ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>遲到 {p.lateMinutes} 分鐘</span>
+                  : p.type === 'in'
+                  ? <span style={{ color: 'var(--green)' }}>準時</span>
+                  : p.overtimeMinutes > 0
+                  ? <span style={{ color: 'var(--amber)' }}>加班 {p.overtimeMinutes} 分鐘</span>
+                  : '--'}
+                {p.isMakeup && <span style={{ color: 'var(--text-muted)', fontSize: 10, marginLeft: 4 }}>補打</span>}
+              </td>
               <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note || '--'}</td>
             </tr>
           ))}
-          {punches.length === 0 && <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
+          {punches.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
         </tbody>
       </table>
     </div>
@@ -410,6 +432,7 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
             {editingEmp === emp.id ? (
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
                 <label style={{ ...labelStyle, flex: '1 1 130px' }}><span>姓名</span><input value={editForm.name||''} onChange={e => onEditChange('name', e.target.value)} /></label>
+                <label style={{ ...labelStyle, flex: '1 1 180px' }}><span>新密碼（留空不修改）</span><input type="password" value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value)} placeholder="輸入新密碼" /></label>
                 <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>職位</span>
                   <select value={editForm.positionId||''} onChange={e => onEditChange('positionId', e.target.value)}>
                     <option value="">— 未設定 —</option>
@@ -597,3 +620,128 @@ const labelStyle = {
   display: 'flex', flexDirection: 'column', gap: 6,
   fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', color: 'var(--text-muted)', textTransform: 'uppercase',
 };
+
+// ── 員工查詢 Tab ─────────────────────────────────────────────
+function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions }) {
+  const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
+  const emp = employees.find(e => e.id === queryEmpId);
+  const punches = allPunches.filter(p => p.uid === queryEmpId);
+  const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
+  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
+    ? calcSalaryFromPunches(punches, emp, leaves)
+    : { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
+
+  const leaveDeduction = emp?.payType === 'hourly'
+    ? leaves.reduce((s,l) => s + (emp.hourlyRate||0)*8*l.workdays*(1-(l.payRate??1)), 0)
+    : 0;
+  const netSalary = Math.max(0, totalSalary - leaveDeduction);
+  const attendedDays = dailyRecords.filter(r => r.inTime).length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* 選擇員工 */}
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 10, letterSpacing: '0.08em' }}>選擇員工</div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {employees.map(e => {
+            const pos = posMap[e.positionId];
+            const active = queryEmpId === e.id;
+            return (
+              <button key={e.id} onClick={() => setQueryEmpId(e.id)} style={{
+                padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 600 : 400,
+                background: active ? 'var(--amber)' : 'var(--bg-elevated)',
+                color: active ? '#000' : 'var(--text-secondary)',
+                border: active ? 'none' : '1px solid var(--border)', cursor: 'pointer',
+              }}>
+                {e.name}
+                {pos && <span style={{ fontSize: 10, marginLeft: 6, opacity: 0.7 }}>({pos.name})</span>}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {!emp ? (
+        <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>請選擇員工查看詳情</div>
+      ) : (
+        <>
+          {/* 出勤概覽 */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+            {[
+              { label: '出勤天數', value: `${attendedDays} 天`, color: 'var(--green)' },
+              { label: '工作時數', value: fmtHours(totalHours), color: 'var(--text-primary)' },
+              { label: '加班時數', value: totalOvertimeHours > 0 ? fmtHours(totalOvertimeHours) : '--', color: 'var(--amber)' },
+              { label: '預估薪資', value: fmtMoney(netSalary), color: 'var(--amber)' },
+            ].map(item => (
+              <div key={item.label} className="card" style={{ padding: '14px 16px' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 6 }}>{item.label}</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600, color: item.color }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* 薪資計算方式 */}
+          <div className="card">
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14, letterSpacing: '0.08em' }}>薪資計算方式</div>
+            {emp.payType === 'monthly' && salaryBreakdown ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                {[
+                  { label: '底薪', sub: `$${(emp.monthlySalary||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.basePay) },
+                  { label: '餐費', sub: `$${(emp.mealAllowance||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.mealPay) },
+                  { label: `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`, sub: salaryBreakdown.hasFullAttendance ? '達成全勤條件' : [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡'].filter(Boolean).join('、'), value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
+                  { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
+                ].map((item, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', opacity: item.dim && item.value === '—' ? 0.45 : 1 }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
+                      {item.sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{item.sub}</div>}
+                    </div>
+                    <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600 }}>{item.value}</div>
+                  </div>
+                ))}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0 0' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700 }}>實領薪資（不含紅利）</div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: 'var(--amber)' }}>{fmtMoney(netSalary)}</div>
+                </div>
+              </div>
+            ) : (
+              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                時薪制：${emp.hourlyRate}/hr × {totalHours.toFixed(1)}h = <strong style={{ color: 'var(--amber)' }}>{fmtMoney(netSalary)}</strong>
+              </div>
+            )}
+          </div>
+
+          {/* 打卡紀錄 */}
+          <div className="card">
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14, letterSpacing: '0.08em' }}>打卡紀錄 — {selectedMonth}</div>
+            {dailyRecords.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 13 }}>本月尚無打卡紀錄</div>
+            ) : (
+              <div className="table-wrapper">
+                <table>
+                  <thead><tr><th>日期</th><th>班別</th><th>上班</th><th>下班</th><th>狀態</th><th>工時</th></tr></thead>
+                  <tbody>
+                    {dailyRecords.map(r => (
+                      <tr key={r.date}>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.date}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--amber)', fontWeight: 700 }}>{r.shiftId || '--'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--green)' }}>{r.inTime || '--'}</td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--red)' }}>{r.outTime || '--'}</td>
+                        <td style={{ fontSize: 11 }}>
+                          {r.lateMinutes > 0
+                            ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>遲到 {r.lateMinutes}分</span>
+                            : r.inTime ? <span style={{ color: 'var(--green)' }}>準時</span> : '--'}
+                        </td>
+                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.hours > 0 ? fmtHours(r.hours) : '--'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
