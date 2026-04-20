@@ -20,20 +20,19 @@ export default function SalaryReport({
 
   if (!employee || !month) return null;
 
-  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary } =
-    calcSalaryFromPunches(punches, employee);
+  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } =
+    calcSalaryFromPunches(punches, employee, leaves);
 
-  // 計算請假扣薪
+  // 計算請假扣薪（時薪制才扣，月薪制已在計算中處理）
   const approvedLeaves = leaves.filter(
     (l) => l.status === 'approved' && l.uid === employee.id
   );
-  const leaveDeductions = approvedLeaves.reduce((sum, l) => {
-    const dailyRate =
-      employee.payType === 'hourly'
-        ? (employee.hourlyRate || 0) * 8
-        : (employee.monthlySalary || 0) / 30;
-    return sum + dailyRate * l.workdays * (1 - (l.payRate ?? 1));
-  }, 0);
+  const leaveDeductions = employee.payType === 'hourly'
+    ? approvedLeaves.reduce((sum, l) => {
+        const dailyRate = (employee.hourlyRate || 0) * 8;
+        return sum + dailyRate * l.workdays * (1 - (l.payRate ?? 1));
+      }, 0)
+    : 0;
 
   const netSalary = Math.max(0, totalSalary - leaveDeductions);
   const workdays = dailyRecords.filter(
@@ -367,31 +366,47 @@ export default function SalaryReport({
               薪資結算
             </div>
             <div style={{ padding: '16px' }}>
-              {[
-                {
-                  label: `基本${
-                    employee.payType === 'hourly' ? '時薪' : '月薪'
-                  }`,
-                  value:
-                    employee.payType === 'hourly'
-                      ? `$${employee.hourlyRate}/hr × ${totalHours.toFixed(1)}h`
-                      : `月薪制 × ${(
-                          (Math.min(totalHours, 160) / 160) *
-                          100
-                        ).toFixed(0)}%`,
-                  amount: totalSalary,
-                },
-                ...(leaveDeductions > 0
-                  ? [
-                      {
-                        label: '請假扣薪',
-                        value: `${approvedLeaves.length} 筆假單`,
-                        amount: -leaveDeductions,
-                        isDeduction: true,
-                      },
-                    ]
-                  : []),
-              ].map((item, i) => (
+              {employee.payType === 'monthly' && salaryBreakdown ? (
+                // ── 月薪制明細 ──────────────────────────────
+                <>
+                  {[
+                    { label: '底薪', sub: `$${(employee.monthlySalary||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
+                    { label: '餐費', sub: `$${(employee.mealAllowance||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
+                    { label: `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`, sub: salaryBreakdown.hasFullAttendance ? '達成全勤條件' : `未達標：${[salaryBreakdown.hasLate?'有遲到':'', salaryBreakdown.hasLeave?'有請假':'', salaryBreakdown.hasMissedPunch?'有忘打卡':''].filter(Boolean).join('、')}`, amount: salaryBreakdown.fullAttendancePay, isDeduction: false, dim: !salaryBreakdown.hasFullAttendance },
+                    { label: '紅利', sub: '月底另行計算', amount: 0, isDeduction: false, dim: true },
+                  ].map((item, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)', opacity: item.dim && item.amount === 0 ? 0.45 : 1 }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>{item.sub}</div>
+                      </div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 14, color: item.dim && item.amount === 0 ? 'var(--text-muted)' : 'var(--text-primary)' }}>
+                        {item.amount === 0 && item.dim ? '—' : fmtMoney(item.amount)}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              ) : (
+                // ── 時薪制明細 ──────────────────────────────
+                <>
+                  {[
+                    { label: '時薪', sub: `$${employee.hourlyRate}/hr × ${totalHours.toFixed(1)}h`, amount: totalSalary, isDeduction: false },
+                    ...(leaveDeductions > 0 ? [{ label: '請假扣薪', sub: `${approvedLeaves.length} 筆假單`, amount: -leaveDeductions, isDeduction: true }] : []),
+                  ].map((item, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>{item.sub}</div>
+                      </div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 14, color: item.isDeduction ? 'var(--red)' : 'var(--text-primary)' }}>
+                        {item.isDeduction ? '-' : ''}{fmtMoney(Math.abs(item.amount))}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+              {/* 假的 item.value 用於保持原有架構，不影響後面的 net total */}
+              {false && [{label:'',value:'',amount:0}].map((item, i) => (
                 <div
                   key={i}
                   style={{
