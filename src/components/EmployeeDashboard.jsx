@@ -4,17 +4,19 @@ import {
   serverTimestamp, Timestamp, doc, getDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';x
 import { calcSalaryFromPunches, fmtMoney, fmtHours } from '../hooks/useSalaryCalc';
 import { getNetworkInfo, isAllowedNetwork } from '../hooks/useNetworkCheck';
 import LeaveManager from './LeaveManager';
 import { format, startOfMonth, endOfMonth, parseISO, isToday } from 'date-fns';
+import { useNav } from '../contexts/NavContext';
 import { zhTW } from 'date-fns/locale';
 
 const TABS = ['打卡', '請假'];
 
 export default function EmployeeDashboard() {
   const { user, profile } = useAuth();
+  const { activePage, setActivePage } = useNav();
   const [now, setNow] = useState(new Date());
   const [punches, setPunches] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -111,15 +113,15 @@ export default function EmployeeDashboard() {
 
     // 只排晚班（沒有早班）
     if (!shift1 && shift2) {
-      if (inCount === 0) return { nextType: 'in', currentShift: shift2, label: '晚班上班打卡', session: 1 };
+      if (inCount === 0) return { nextType: 'in',  currentShift: shift2, label: '晚班上班打卡', session: 1 };
       if (inCount === 1 && outCount === 0) return { nextType: 'out', currentShift: shift2, label: '晚班下班打卡', session: 1 };
       return { nextType: null, currentShift: null, label: '今日打卡完成', session: 0 };
     }
 
-    // 只排早班或雙頭班
-    if (inCount === 0) return { nextType: 'in', currentShift: shift1, label: '早班上班打卡', session: 1 };
+    // 只排早班（沒有晚班）或雙頭班
+    if (inCount === 0) return { nextType: 'in',  currentShift: shift1, label: '早班上班打卡', session: 1 };
     if (inCount === 1 && outCount === 0) return { nextType: 'out', currentShift: shift1, label: '早班下班打卡', session: 1 };
-    if (inCount === 1 && outCount === 1 && hasBoth) return { nextType: 'in', currentShift: shift2, label: '晚班上班打卡', session: 2 };
+    if (inCount === 1 && outCount === 1 && hasBoth) return { nextType: 'in',  currentShift: shift2, label: '晚班上班打卡', session: 2 };
     if (inCount === 2 && outCount === 1 && hasBoth) return { nextType: 'out', currentShift: shift2, label: '晚班下班打卡', session: 2 };
     return { nextType: null, currentShift: null, label: '今日打卡完成', session: 0 };
   }
@@ -139,7 +141,7 @@ export default function EmployeeDashboard() {
       if (nowMins < startMins - 15) {
         return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘（${shift.id}班 ${shift.start} 上班）` };
       }
-      
+      if (nowMins > endMins) return { ok: false, msg: `已超過 ${shift.id}班 下班時間（${shift.end}）` };
       const lateMin = Math.max(0, nowMins - startMins);
       return { ok: true, msg: lateMin > 0 ? `⚠️ 遲到 ${lateMin} 分鐘` : '', shiftId: shift.id, lateMinutes: lateMin };
     } else {
@@ -181,28 +183,34 @@ export default function EmployeeDashboard() {
     setPunchLoading(false);
   }
 
-  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, profile);
+  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = calcSalaryFromPunches(punches, profile);
   const canPunch = networkStatus.allowed && (todayShifts.shift1 || todayShifts.shift2) && punchState.nextType;
 
+  // ── 本月統計頁面 ────────────────────────────────────────────
+  if (activePage === 'stats') {
+    return <StatsPage
+      profile={profile}
+      punches={punches}
+      loading={loading}
+      selectedMonth={selectedMonth}
+      setSelectedMonth={setSelectedMonth}
+      dailyRecords={dailyRecords}
+      totalHours={totalHours}
+      totalOvertimeHours={totalOvertimeHours}
+      totalSalary={totalSalary}
+      salaryBreakdown={salaryBreakdown}
+    />;
+  }
+
+  // ── 打卡介面 ─────────────────────────────────────────────────
   return (
     <div style={{ padding: '12px', maxWidth: 600, margin: '0 auto' }} className="fade-in">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600 }}>員工介面</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>歡迎回來，<strong>{profile?.name}</strong></p>
-        </div>
-        <div style={{ display: 'flex', gap: 4, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4 }}>
-          {TABS.map(t => (
-            <button key={t} onClick={() => setActiveTab(t)} style={{
-              padding: '7px 18px', borderRadius: 6, fontSize: 13, fontWeight: 500,
-              background: activeTab === t ? 'var(--amber)' : 'transparent',
-              color: activeTab === t ? '#000' : 'var(--text-secondary)',
-            }}>{t}</button>
-          ))}
-        </div>
+      <div style={{ marginBottom: 14 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600 }}>打卡介面</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>歡迎回來，<strong>{profile?.name}</strong></p>
       </div>
 
-      {activeTab === '打卡' ? (
+      {true ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* 今日班別 */}
@@ -262,8 +270,10 @@ export default function EmployeeDashboard() {
             {/* 今日打卡進度 */}
             <div style={{ display: 'flex', justifyContent: 'center', gap: 8, margin: '14px 0', flexWrap: 'wrap' }}>
               {(
+                // 只排晚班：只顯示晚班兩步驟
                 !todayShifts.shift1 && todayShifts.shift2
                   ? [{ label: '晚班上班', idx: 0 }, { label: '晚班下班', idx: 1 }]
+                  // 只早班或雙頭班
                   : [
                       { label: '早班上班', idx: 0 },
                       { label: '早班下班', idx: 1 },
@@ -273,7 +283,9 @@ export default function EmployeeDashboard() {
                 const done = todayPunches.length > idx;
                 const current = todayPunches.length === idx;
                 return (
-                  <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                  <div key={idx} style={{
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                  }}>
                     <div style={{
                       width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
                       background: done ? 'var(--green)' : current ? 'var(--amber)' : 'var(--bg-elevated)',
@@ -311,17 +323,6 @@ export default function EmployeeDashboard() {
                !punchState.nextType ? '今日打卡完成 ✓' :
                punchState.nextType === 'in' ? `▶ ${punchState.label}` : `⏹ ${punchState.label}`}
             </button>
-          </div>
-
-          {/* 本月統計 */}
-          <div className="card">
-            <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 12 }}>本月統計</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <StatRow label="工作時數" value={fmtHours(totalHours)} />
-              {totalOvertimeHours > 0 && <StatRow label="加班時數" value={fmtHours(totalOvertimeHours)} color="var(--amber)" />}
-              <StatRow label="薪資類型" value={profile?.payType === 'hourly' ? `時薪 $${profile?.hourlyRate}` : '月薪制'} />
-              <StatRow label="預估薪資" value={fmtMoney(totalSalary)} highlight />
-            </div>
           </div>
 
           {/* 打卡紀錄 */}
@@ -375,8 +376,6 @@ export default function EmployeeDashboard() {
             )}
           </div>
         </div>
-      ) : (
-        <LeaveManager isAdmin={false} />
       )}
     </div>
   );
@@ -389,6 +388,121 @@ function StatRow({ label, value, highlight, color }) {
       <span style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 600, color: color || (highlight ? 'var(--amber)' : 'var(--text-primary)') }}>
         {value}
       </span>
+    </div>
+  );
+}
+
+// ── 本月統計頁面元件 ─────────────────────────────────────────
+function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown }) {
+  const attendedDays = dailyRecords.filter(r => r.inTime).length;
+
+  return (
+    <div style={{ padding: '12px', maxWidth: 600, margin: '0 auto' }} className="fade-in">
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600 }}>本月統計</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>{profile?.name}</p>
+      </div>
+
+      {/* 月份選擇 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+        <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width: 150, fontSize: 12 }} />
+      </div>
+
+      {/* 出勤概覽 */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 14 }}>
+        {[
+          { label: '出勤天數', value: `${attendedDays} 天`, color: 'var(--green)' },
+          { label: '工作時數', value: fmtHours(totalHours), color: 'var(--text-primary)' },
+          ...(totalOvertimeHours > 0 ? [{ label: '加班時數', value: fmtHours(totalOvertimeHours), color: 'var(--amber)' }] : []),
+          { label: '薪資類型', value: profile?.payType === 'hourly' ? `時薪 $${profile?.hourlyRate}` : '月薪制', color: 'var(--text-primary)' },
+        ].map(item => (
+          <div key={item.label} className="card" style={{ padding: '14px 16px' }}>
+            <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 6 }}>{item.label}</div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600, color: item.color }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 月薪制：薪資明細 */}
+      {profile?.payType === 'monthly' && salaryBreakdown && (
+        <div className="card" style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 14 }}>薪資明細</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {[
+              { label: '底薪', sub: `$${(profile?.monthlySalary||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.basePay), color: 'var(--text-primary)' },
+              { label: '餐費', sub: `$${(profile?.mealAllowance||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.mealPay), color: 'var(--text-primary)' },
+              {
+                label: `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`,
+                sub: salaryBreakdown.hasFullAttendance ? '達成全勤條件' : [salaryBreakdown.hasLate && '有遲到', salaryBreakdown.hasLeave && '有請假', salaryBreakdown.hasMissedPunch && '有忘打卡'].filter(Boolean).join('、'),
+                value: fmtMoney(salaryBreakdown.fullAttendancePay),
+                color: salaryBreakdown.hasFullAttendance ? 'var(--green)' : 'var(--text-muted)',
+                dim: !salaryBreakdown.hasFullAttendance,
+              },
+              { label: '紅利', sub: '月底另行計算', value: '—', color: 'var(--text-muted)', dim: true },
+            ].map((item, i) => (
+              <div key={i} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 0', borderBottom: '1px solid var(--border)',
+                opacity: item.dim ? 0.5 : 1,
+              }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
+                  {item.sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{item.sub}</div>}
+                </div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, color: item.color }}>{item.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 實領薪資 */}
+      <div className="card" style={{ background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.25)', marginBottom: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 2 }}>預估實領薪資</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{selectedMonth}（不含紅利）</div>
+          </div>
+          <div style={{ fontFamily: 'var(--mono)', fontSize: 26, fontWeight: 700, color: 'var(--amber)' }}>{fmtMoney(totalSalary)}</div>
+        </div>
+      </div>
+
+      {/* 每日打卡明細 */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 10 }}>每日出勤明細</div>
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>
+        ) : dailyRecords.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: 30, color: 'var(--text-muted)', fontSize: 13 }}>本月尚無打卡紀錄</div>
+        ) : (
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr><th>日期</th><th>班</th><th>上班</th><th>下班</th><th>狀態</th><th>工時</th></tr>
+              </thead>
+              <tbody>
+                {dailyRecords.map(r => (
+                  <tr key={r.date}>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.date}</td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11, fontWeight: 700, color: 'var(--amber)' }}>{r.shiftId || '--'}</td>
+                    <td style={{ fontFamily: 'var(--mono)', color: 'var(--green)', fontSize: 11 }}>{r.inTime || '--'}</td>
+                    <td style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontSize: 11 }}>{r.outTime || '--'}</td>
+                    <td style={{ fontSize: 10 }}>
+                      {r.lateMinutes > 0
+                        ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>遲到 {r.lateMinutes}分</span>
+                        : r.inTime
+                        ? <span style={{ color: 'var(--green)' }}>準時</span>
+                        : '--'}
+                      {r.overtimeHours > 0 && <span style={{ color: 'var(--amber)', marginLeft: 4 }}>+加班</span>}
+                    </td>
+                    <td style={{ fontFamily: 'var(--mono)', fontSize: 11 }}>{r.hours > 0 ? fmtHours(r.hours) : '--'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
