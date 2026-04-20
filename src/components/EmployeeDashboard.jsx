@@ -210,8 +210,7 @@ export default function EmployeeDashboard() {
         <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>歡迎回來，<strong>{profile?.name}</strong></p>
       </div>
 
-      {true ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
           {/* 今日班別 */}
           <div className="card" style={{ padding: '12px 16px' }}>
@@ -375,8 +374,7 @@ export default function EmployeeDashboard() {
               </div>
             )}
           </div>
-        </div>
-      )}
+      </div>
     </div>
   );
 }
