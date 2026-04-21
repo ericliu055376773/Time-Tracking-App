@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAdminNav } from '../contexts/AdminNavContext';
 import {
   collection, query, getDocs, where, orderBy,
   doc, updateDoc, setDoc, getDoc, addDoc, Timestamp, serverTimestamp
@@ -14,8 +15,6 @@ import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import PositionManager from './PositionManager';
 import SalaryRuleManager from './SalaryRuleManager';
-const TABS = ['薪資結算', '打卡紀錄', '員工查詢', '請假審核', '員工管理', 'WiFi 設定', '薪資算法', '職位管理', '班別設定', '排班管理'];
-
 const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
   role: 'employee', payType: 'hourly',
@@ -28,7 +27,7 @@ export default function AdminDashboard() {
   const [allLeaves, setAllLeaves] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState('薪資結算');
+  const { activeTab, setActiveTab } = useAdminNav();
   const [queryEmpId, setQueryEmpId] = useState('');
   const [editingEmp, setEditingEmp] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -194,21 +193,7 @@ export default function AdminDashboard() {
         <KpiCard label="本月應付薪資" value={fmtMoney(totalPayroll)} color="var(--amber)" highlight />
       </div>
 
-      <div style={{ display: 'flex', gap: 3, marginBottom: 20, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4, width: 'fit-content', flexWrap: 'wrap' }}>
-        {TABS.map(t => (
-          <button key={t} onClick={() => setActiveTab(t)} style={{
-            padding: '7px 14px', borderRadius: 6, fontSize: 12, fontWeight: 500,
-            background: activeTab === t ? 'var(--amber)' : 'transparent',
-            color: activeTab === t ? '#000' : 'var(--text-secondary)',
-            position: 'relative',
-          }}>
-            {t}
-            {t === '請假審核' && pendingLeaves > 0 && (
-              <span style={{ position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%', background: 'var(--red)' }} />
-            )}
-          </button>
-        ))}
-      </div>
+
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>載入中...</div>
