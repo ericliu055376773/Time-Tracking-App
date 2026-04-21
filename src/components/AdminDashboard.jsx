@@ -14,7 +14,7 @@ import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import PositionManager from './PositionManager';
 import SalaryRuleManager from './SalaryRuleManager';
-const TABS = ['薪資結算', '打卡紀錄', '員工查詢', '請假審核', '員工管理', 'WiFi 設定', '薪資算法', '職位管理', '班別設定', '排班管理'];
+const TABS = ['薪資結算', '打卡紀錄', '員工查詢', '請假審核', '員工管理', 'WiFi 設定', '月薪算法', '職位管理', '班別設定', '排班管理'];
 
 const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
@@ -226,7 +226,7 @@ export default function AdminDashboard() {
   <PositionManager />
 ) : activeTab === '班別設定' ? (
   <ShiftManager />
-      ) : activeTab === '薪資算法' ? (
+      ) : activeTab === '月薪算法' ? (
         <SalaryRuleManager />
       ) : activeTab === '排班管理' ? (
         <ScheduleManager />
