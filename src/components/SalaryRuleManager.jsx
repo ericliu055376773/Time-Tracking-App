@@ -25,6 +25,11 @@ const DEFAULT_RULES = {
 let idCounter = Date.now();
 function newId() { return `item_${idCounter++}`; }
 
+// 取得當月日曆總天數（不含假日判斷，純粹幾月有幾天）
+function getTotalDays(year, month) {
+  return new Date(year, month, 0).getDate(); // e.g. 4月=30, 5月=31
+}
+
 // 從行政院行事曆API取得當月實際上班天數（扣週末＋國定假日）
 async function fetchWorkingDays(year, month) {
   try {
@@ -62,6 +67,7 @@ export default function SalaryRuleManager() {
   const [activeSection, setActiveSection] = useState('monthly'); // 'monthly' | 'hourly'
   const [editing, setEditing] = useState({});
   const [workingDays, setWorkingDays] = useState(null);
+  const [totalDays, setTotalDays] = useState(null);
   const [workingDaysLoading, setWorkingDaysLoading] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date();
@@ -85,6 +91,7 @@ export default function SalaryRuleManager() {
     if (!selectedMonth) return;
     const [y, m] = selectedMonth.split('-').map(Number);
     setWorkingDaysLoading(true);
+    setTotalDays(getTotalDays(y, m));
     fetchWorkingDays(y, m).then(d => {
       setWorkingDays(d);
       setWorkingDaysLoading(false);
@@ -107,7 +114,8 @@ export default function SalaryRuleManager() {
   if (!rules) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>;
 
   const [sy, sm] = selectedMonth.split('-').map(Number);
-  const wd = workingDays || 30;
+  const wd = workingDays || 30;  // 工作天數（扣假日）
+  const td = totalDays || 30;   // 當月日曆總天數
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -441,7 +449,7 @@ export default function SalaryRuleManager() {
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
               style={{ fontSize: 13, background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
             <span style={{ fontSize: 12, color: workingDaysLoading ? 'var(--amber)' : 'var(--green)', fontFamily: 'var(--mono)' }}>
-              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月上班天數：${wd} 天`}
+              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天　工作天數：${wd} 天`}
             </span>
           </div>
 
@@ -449,7 +457,7 @@ export default function SalaryRuleManager() {
           <div className="card" style={{ padding: '14px 20px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}>
             <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--amber)', marginBottom: 6 }}>📌 8小時以上加班費計算方式</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-              時薪基準 ＝ 底薪 ÷ {wd} 天 ÷ 8 小時<br />
+              時薪基準 ＝ 底薪 ÷ {td} 天（當月總天數）÷ 8 小時<br />
               1 小時加班費 ＝ 時薪基準 × 1.34<br />
               {rules.monthlyOTMinutes} 分鐘加班費 ＝ 時薪基準 × 1.34 ÷ 60 × {rules.monthlyOTMinutes}
             </div>
@@ -481,7 +489,7 @@ export default function SalaryRuleManager() {
           ) : (
             positions.map(pos => {
               const baseSalary = pos.baseSalary || 0;
-              const hourlyBase = baseSalary / wd / 8;
+              const hourlyBase = baseSalary / td / 8;
               const ot1h = hourlyBase * 1.34;
               const otMin = ot1h / 60 * rules.monthlyOTMinutes;
               return (
@@ -492,7 +500,7 @@ export default function SalaryRuleManager() {
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                     {/* 時薪基準 */}
-                    <OTRow label="時薪基準" formula={`$${baseSalary.toLocaleString()} ÷ ${wd}天 ÷ 8h`} result={`$${hourlyBase.toFixed(1)} / h`} color="var(--text-secondary)" />
+                    <OTRow label="時薪基準" formula={`$${baseSalary.toLocaleString()} ÷ ${td}天 ÷ 8h`} result={`$${hourlyBase.toFixed(1)} / h`} color="var(--text-secondary)" />
                     {/* 1小時加班費 */}
                     <OTRow label="1 小時加班費" formula={`時薪 × 1.34`} result={`$${Math.round(ot1h).toLocaleString()} / h`} color="var(--green)" />
                     {/* N分鐘加班費 */}
@@ -514,7 +522,8 @@ export default function SalaryRuleManager() {
             <div style={{ fontWeight: 700, fontSize: 14, color: '#60a5fa', marginBottom: 6 }}>📌 8小時以上加班費計算方式</div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
               1 小時加班費 ＝ 個人時薪 × 1.34<br />
-              {rules.hourlyOTMinutes} 分鐘加班費 ＝ 個人時薪 ÷ 60 × {rules.hourlyOTMinutes}
+              {rules.hourlyOTMinutes} 分鐘加班費 ＝ 個人時薪 ÷ 60 × {rules.hourlyOTMinutes}<br />
+              <span style={{color:'var(--text-muted)',fontSize:11}}>（時薪制直接用個人時薪，不需除以天數）</span>
             </div>
           </div>
 
