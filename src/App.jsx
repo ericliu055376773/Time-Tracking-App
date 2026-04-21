@@ -6,6 +6,7 @@ import EmployeeDashboard from './components/EmployeeDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import Layout from './components/Layout';
 import { NavProvider } from './contexts/NavContext';
+import { AdminNavProvider } from './contexts/AdminNavContext';
 
 function AppRoutes() {
   const { user, profile, loading } = useAuth();
@@ -47,13 +48,15 @@ function AppRoutes() {
 
   if (profile.role === 'admin') {
     return (
-      <Layout>
-        <Routes>
-          <Route path="/admin" element={<AdminDashboard />} />
-          <Route path="/employee" element={<EmployeeDashboard />} />
-          <Route path="*" element={<Navigate to="/admin" replace />} />
-        </Routes>
-      </Layout>
+      <AdminNavProvider>
+        <Layout>
+          <Routes>
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/employee" element={<EmployeeDashboard />} />
+            <Route path="*" element={<Navigate to="/admin" replace />} />
+          </Routes>
+        </Layout>
+      </AdminNavProvider>
     );
   }
 
