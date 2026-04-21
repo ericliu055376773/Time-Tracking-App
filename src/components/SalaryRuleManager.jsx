@@ -23,20 +23,25 @@ const DEFAULT_RULES = {
 let idCounter = Date.now();
 function newId() { return `item_${idCounter++}`; }
 
-// 從行政院行事曆API取得當月工作天數
+// 從行政院行事曆API取得當月實際上班天數（扣週末＋國定假日）
 async function fetchWorkingDays(year, month) {
   try {
     const pad = n => String(n).padStart(2, '0');
     const startDate = `${year}${pad(month)}01`;
     const lastDay = new Date(year, month, 0).getDate();
     const endDate = `${year}${pad(month)}${pad(lastDay)}`;
+    // 行政院人事行政總處行事曆 API
+    // isHoliday === '否' 代表正常上班日
     const url = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${startDate},date:lte:${endDate}&limit=50`;
     const res = await fetch(url);
     const json = await res.json();
-    const holidays = (json?.result?.records || []).filter(r => r.isHoliday === '是').length;
-    return lastDay - holidays;
+    const records = json?.result?.records || [];
+    if (records.length === 0) throw new Error('no data');
+    // 計算 isHoliday === '否' 的天數（實際上班日）
+    const workDays = records.filter(r => r.isHoliday === '否').length;
+    return workDays;
   } catch {
-    // 若API失敗，用簡單計算（扣掉週六日）
+    // API 失敗時，備用：只扣週六日
     let workDays = 0;
     const last = new Date(year, month, 0).getDate();
     for (let d = 1; d <= last; d++) {
