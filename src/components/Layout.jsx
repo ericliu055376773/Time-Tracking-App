@@ -10,10 +10,11 @@ const ADMIN_TABS = [
   { key: '請假審核',  icon: '📋' },
   { key: '員工管理',  icon: '👥' },
   { key: 'WiFi 設定', icon: '📡' },
-  { key: '薪資算法',  icon: '📐' },
-  { key: '職位管理',  icon: '🏷️' },
+  { key: '月薪算法',  icon: '📐' },
+  { key: '職位薪資',  icon: '🏷️' },
   { key: '班別設定',  icon: '⏰' },
   { key: '排班管理',  icon: '📅' },
+  { key: '特休及補償', icon: '🌴', children: ['特休天數', '未休補償'] },
 ];
 
 const EMP_TABS = [
@@ -101,24 +102,60 @@ export default function Layout({ children }) {
             {/* 導航 */}
             <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
               {isAdmin && adminNav ? (
-                // 管理員導航
+                // 管理員導航（支援子分類）
                 ADMIN_TABS.map(tab => {
-                  const active = adminNav.activeTab === tab.key;
+                  const hasChildren = tab.children && tab.children.length > 0;
+                  const isParentActive = hasChildren && tab.children.includes(adminNav.activeTab);
+                  const active = adminNav.activeTab === tab.key || isParentActive;
                   return (
-                    <button key={tab.key}
-                      onClick={() => { adminNav.setActiveTab(tab.key); setSidebarOpen(false); }}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 8,
-                        padding: '9px 12px', borderRadius: 8, width: '100%',
-                        fontSize: 13, fontWeight: active ? 700 : 400,
-                        background: active ? 'var(--amber-glow)' : 'transparent',
-                        border: active ? '1px solid rgba(245,158,11,0.25)' : '1px solid transparent',
-                        color: active ? 'var(--amber)' : 'var(--text-secondary)',
-                        cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
-                      }}>
-                      <span style={{ fontSize: 14 }}>{tab.icon}</span>
-                      {tab.key}
-                    </button>
+                    <div key={tab.key}>
+                      <button
+                        onClick={() => {
+                          if (hasChildren) {
+                            adminNav.setActiveTab(tab.children[0]);
+                          } else {
+                            adminNav.setActiveTab(tab.key);
+                          }
+                          setSidebarOpen(false);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '9px 12px', borderRadius: 8, width: '100%',
+                          fontSize: 13, fontWeight: active ? 700 : 400,
+                          background: active ? 'var(--amber-glow)' : 'transparent',
+                          border: active ? '1px solid rgba(245,158,11,0.25)' : '1px solid transparent',
+                          color: active ? 'var(--amber)' : 'var(--text-secondary)',
+                          cursor: 'pointer', textAlign: 'left', transition: 'all 0.15s',
+                        }}>
+                        <span style={{ fontSize: 14 }}>{tab.icon}</span>
+                        <span style={{ flex: 1 }}>{tab.key}</span>
+                        {hasChildren && <span style={{ fontSize: 10 }}>{isParentActive ? '▾' : '▸'}</span>}
+                      </button>
+                      {/* 子分類 */}
+                      {hasChildren && isParentActive && (
+                        <div style={{ marginLeft: 16, marginTop: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {tab.children.map(child => {
+                            const childActive = adminNav.activeTab === child;
+                            return (
+                              <button key={child}
+                                onClick={() => { adminNav.setActiveTab(child); setSidebarOpen(false); }}
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: 8,
+                                  padding: '7px 12px', borderRadius: 7, width: '100%',
+                                  fontSize: 12, fontWeight: childActive ? 700 : 400,
+                                  background: childActive ? 'rgba(245,158,11,0.15)' : 'transparent',
+                                  border: childActive ? '1px solid rgba(245,158,11,0.2)' : '1px solid transparent',
+                                  color: childActive ? 'var(--amber)' : 'var(--text-secondary)',
+                                  cursor: 'pointer', textAlign: 'left',
+                                }}>
+                                <span style={{ fontSize: 11 }}>{'└'}</span>
+                                {child}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   );
                 })
               ) : (
