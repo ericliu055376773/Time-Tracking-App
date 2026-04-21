@@ -15,6 +15,7 @@ import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import PositionManager from './PositionManager';
 import SalaryRuleManager from './SalaryRuleManager';
+import AnnualLeaveManager from './AnnualLeaveManager';
 const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
   role: 'employee', payType: 'hourly',
@@ -207,14 +208,18 @@ export default function AdminDashboard() {
         <LeaveManager isAdmin={true} />
 ) : activeTab === 'WiFi 設定' ? (
   <WifiSettings />
-) : activeTab === '職位管理' ? (
+) : activeTab === '職位薪資' ? (
   <PositionManager />
 ) : activeTab === '班別設定' ? (
   <ShiftManager />
-      ) : activeTab === '薪資算法' ? (
+      ) : activeTab === '月薪算法' ? (
         <SalaryRuleManager />
       ) : activeTab === '排班管理' ? (
         <ScheduleManager />
+      ) : activeTab === '特休天數' ? (
+        <AnnualLeaveManager subTab="特休天數" />
+      ) : activeTab === '未休補償' ? (
+        <AnnualLeaveManager subTab="未休補償" />
       ) : (
         <EmployeesTab
           employees={employees}
