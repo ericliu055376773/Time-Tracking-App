@@ -18,6 +18,8 @@ const DEFAULT_RULES = {
   hourlyLateDeductionPerMinute: 0,
   // 通用
   customItems: [],
+  monthlyOTMinutes: 10,   // 月薪加班計算單位（分鐘）
+  hourlyOTMinutes: 10,    // 時薪加班計算單位（分鐘）
 };
 
 let idCounter = Date.now();
@@ -114,7 +116,7 @@ export default function SalaryRuleManager() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         {/* 分類切換 */}
         <div style={{ display: 'flex', gap: 3, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4 }}>
-          {[{ key: 'monthly', label: '月薪制扣款設定' }, { key: 'hourly', label: '時薪制扣款設定' }].map(tab => (
+          {[{ key: 'monthly', label: '月薪制扣款設定' }, { key: 'hourly', label: '時薪制扣款設定' }, { key: 'monthlyOT', label: '月薪薪資補償' }, { key: 'hourlyOT', label: '時薪薪資補償' }].map(tab => (
             <button key={tab.key} onClick={() => setActiveSection(tab.key)} style={{
               padding: '7px 16px', borderRadius: 6, fontSize: 13, fontWeight: activeSection === tab.key ? 700 : 400,
               background: activeSection === tab.key ? 'var(--amber)' : 'transparent',
@@ -429,6 +431,132 @@ export default function SalaryRuleManager() {
         </div>
       )}
 
+      {/* ════ 月薪薪資補償 ════ */}
+      {activeSection === 'monthlyOT' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* 月份選擇 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>計算月份：</span>
+            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
+              style={{ fontSize: 13, background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
+            <span style={{ fontSize: 12, color: workingDaysLoading ? 'var(--amber)' : 'var(--green)', fontFamily: 'var(--mono)' }}>
+              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月上班天數：${wd} 天`}
+            </span>
+          </div>
+
+          {/* 說明標題 */}
+          <div className="card" style={{ padding: '14px 20px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--amber)', marginBottom: 6 }}>📌 8小時以上加班費計算方式</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+              時薪基準 ＝ 底薪 ÷ {wd} 天 ÷ 8 小時<br />
+              1 小時加班費 ＝ 時薪基準 × 1.34<br />
+              {rules.monthlyOTMinutes} 分鐘加班費 ＝ 時薪基準 × 1.34 ÷ 60 × {rules.monthlyOTMinutes}
+            </div>
+          </div>
+
+          {/* 加班分鐘設定 */}
+          <DeductCard title="加班計算單位" prefix="+" color="var(--amber)"
+            isEditing={editing.monthlyOTMin} onToggleEdit={() => toggleEdit('monthlyOTMin')}>
+            {editing.monthlyOTMin ? (
+              <EditRow>
+                <span style={muteTxt}>每次加班以</span>
+                <NumInput value={rules.monthlyOTMinutes} onChange={v => update('monthlyOTMinutes', Math.max(1, v))} width={70} />
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每次加班以</span>
+                <span style={whiteVal}>{rules.monthlyOTMinutes}</span>
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 各職位加班費計算 */}
+          {positions.length === 0 ? (
+            <div className="card" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              請先至「職位管理」設定職位資料
+            </div>
+          ) : (
+            positions.map(pos => {
+              const baseSalary = pos.baseSalary || 0;
+              const hourlyBase = baseSalary / wd / 8;
+              const ot1h = hourlyBase * 1.34;
+              const otMin = ot1h / 60 * rules.monthlyOTMinutes;
+              return (
+                <div key={pos.id} className="card" style={{ padding: '18px 20px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.12)', color: 'var(--amber)', fontSize: 12 }}>{pos.name}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>底薪 ${baseSalary.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* 時薪基準 */}
+                    <OTRow label="時薪基準" formula={`$${baseSalary.toLocaleString()} ÷ ${wd}天 ÷ 8h`} result={`$${hourlyBase.toFixed(1)} / h`} color="var(--text-secondary)" />
+                    {/* 1小時加班費 */}
+                    <OTRow label="1 小時加班費" formula={`時薪 × 1.34`} result={`$${Math.round(ot1h).toLocaleString()} / h`} color="var(--green)" />
+                    {/* N分鐘加班費 */}
+                    <OTRow label={`${rules.monthlyOTMinutes} 分鐘加班費`} formula={`時薪 × 1.34 ÷ 60 × ${rules.monthlyOTMinutes}`} result={`$${Math.round(otMin).toLocaleString()} / ${rules.monthlyOTMinutes}分`} color="var(--amber)" />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ════ 時薪薪資補償 ════ */}
+      {activeSection === 'hourlyOT' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* 說明標題 */}
+          <div className="card" style={{ padding: '14px 20px', background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.25)' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#60a5fa', marginBottom: 6 }}>📌 8小時以上加班費計算方式</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+              1 小時加班費 ＝ 個人時薪 × 1.34<br />
+              {rules.hourlyOTMinutes} 分鐘加班費 ＝ 個人時薪 ÷ 60 × {rules.hourlyOTMinutes}
+            </div>
+          </div>
+
+          {/* 加班分鐘設定 */}
+          <DeductCard title="加班計算單位" prefix="+" color="#60a5fa"
+            isEditing={editing.hourlyOTMin} onToggleEdit={() => toggleEdit('hourlyOTMin')}>
+            {editing.hourlyOTMin ? (
+              <EditRow>
+                <span style={muteTxt}>每次加班以</span>
+                <NumInput value={rules.hourlyOTMinutes} onChange={v => update('hourlyOTMinutes', Math.max(1, v))} width={70} />
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每次加班以</span>
+                <span style={whiteVal}>{rules.hourlyOTMinutes}</span>
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 各時薪員工加班費 */}
+          {positions.length === 0 ? (
+            <div className="card" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              請先至「員工管理」設定時薪制員工
+            </div>
+          ) : (
+            // 這裡用 positions 裡有 hourlyRate 的職位（或直接用員工資料）
+            <div className="card" style={{ padding: '16px 20px' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                時薪制員工加班費依各自時薪計算，請至「員工查詢」查看個別員工
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <OTRow label="1 小時加班費" formula="個人時薪 × 1.34" result="依各員工時薪" color="var(--green)" />
+                <OTRow label={`${rules.hourlyOTMinutes} 分鐘加班費`} formula={`個人時薪 ÷ 60 × ${rules.hourlyOTMinutes}`} result="依各員工時薪" color="#60a5fa" />
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
     </div>
   );
 }
@@ -484,6 +612,18 @@ function NumInput({ value, onChange, width = 100 }) {
       onChange={e => onChange(Number(e.target.value))}
       style={{ width, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, background: 'var(--bg-base)', color: '#fff', fontWeight: 700, textAlign: 'center', outline: 'none' }}
     />
+  );
+}
+
+function OTRow({ label, formula, result, color }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-base)', borderRadius: 8 }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>{formula}</div>
+      </div>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: color || 'var(--amber)' }}>{result}</div>
+    </div>
   );
 }
 
