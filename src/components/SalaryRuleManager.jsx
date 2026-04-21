@@ -151,7 +151,7 @@ export default function SalaryRuleManager() {
             <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>計算月份：</span>
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ fontSize: 13, background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
             <span style={{ fontSize: 12, color: workingDaysLoading ? 'var(--amber)' : 'var(--green)', fontFamily: 'var(--mono)' }}>
-              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月工作天數：${wd} 天`}
+              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天`}
             </span>
           </div>
 
@@ -216,7 +216,7 @@ export default function SalaryRuleManager() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
                   扣款公式（每1天）：<br />
-                  <span style={{ color: 'var(--red)' }}>（底薪 ÷ {wd}天 × 1）＋（餐費 ÷ {wd}天 × 1）</span>
+                  <span style={{ color: 'var(--red)' }}>（底薪 ÷ {td}天 × 1）＋（餐費 ÷ {td}天 × 1）</span>
                   <br />
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontSize: 13 }}>
                     <input type="checkbox" checked={!!rules.personalLeaveIncludeFullAtt}
@@ -232,13 +232,13 @@ export default function SalaryRuleManager() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-                  <span style={{ color: 'var(--red)', fontWeight: 600 }}>（底薪 ÷ {wd} × 1）＋（餐費 ÷ {wd} × 1）</span>
+                  <span style={{ color: 'var(--red)', fontWeight: 600 }}>（底薪 ÷ {td} × 1）＋（餐費 ÷ {td} × 1）</span>
                 </div>
                 {positions.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
                     {positions.map(pos => {
-                      const base = (pos.baseSalary || 0) / wd;
-                      const meal = (pos.mealAllowance || 0) / wd;
+                      const base = (pos.baseSalary || 0) / td;
+                      const meal = (pos.mealAllowance || 0) / td;
                       return (
                         <div key={pos.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 10px', background: 'var(--bg-base)', borderRadius: 6 }}>
                           <span style={{ color: 'var(--text-secondary)' }}>{pos.name}</span>
@@ -272,7 +272,7 @@ export default function SalaryRuleManager() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
                   扣款公式（每1天）：<br />
-                  <span style={{ color: 'var(--amber)' }}>（底薪 ÷ {wd}天 × 0.5）＋（餐費 ÷ {wd}天 × 1）</span>
+                  <span style={{ color: 'var(--amber)' }}>（底薪 ÷ {td}天 × 0.5）＋（餐費 ÷ {td}天 × 1）</span>
                   <br />
                   <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontSize: 13 }}>
                     <input type="checkbox" checked={!!rules.sickLeaveIncludeFullAtt}
@@ -288,13 +288,13 @@ export default function SalaryRuleManager() {
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
-                  <span style={{ color: 'var(--amber)', fontWeight: 600 }}>（底薪 ÷ {wd} × 0.5）＋（餐費 ÷ {wd} × 1）</span>
+                  <span style={{ color: 'var(--amber)', fontWeight: 600 }}>（底薪 ÷ {td} × 0.5）＋（餐費 ÷ {td} × 1）</span>
                 </div>
                 {positions.length > 0 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
                     {positions.map(pos => {
-                      const base = (pos.baseSalary || 0) / wd * 0.5;
-                      const meal = (pos.mealAllowance || 0) / wd;
+                      const base = (pos.baseSalary || 0) / td * 0.5;
+                      const meal = (pos.mealAllowance || 0) / td;
                       return (
                         <div key={pos.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 10px', background: 'var(--bg-base)', borderRadius: 6 }}>
                           <span style={{ color: 'var(--text-secondary)' }}>{pos.name}</span>
@@ -449,7 +449,7 @@ export default function SalaryRuleManager() {
             <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
               style={{ fontSize: 13, background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
             <span style={{ fontSize: 12, color: workingDaysLoading ? 'var(--amber)' : 'var(--green)', fontFamily: 'var(--mono)' }}>
-              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天　工作天數：${wd} 天`}
+              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天`}
             </span>
           </div>
 
