@@ -8,7 +8,7 @@ const ADMIN_TABS = [
   { key: '打卡紀錄',  icon: '🕐' },
   { key: '員工查詢',  icon: '🔍' },
   { key: '請假審核',  icon: '📋' },
-  { key: '員工管理',  icon: '👥' },
+  { key: '員工薪資',  icon: '👥' },
   { key: 'WiFi 設定', icon: '📡' },
   { key: '月薪算法',  icon: '📐' },
   { key: '職位薪資',  icon: '🏷️' },
