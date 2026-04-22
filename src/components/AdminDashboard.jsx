@@ -130,13 +130,9 @@ export default function AdminDashboard() {
         })(),
       });
       // 修改密碼
-      if (editForm.newPassword && editForm.newPassword.length >= 6) {
-        try {
-          const { getFunctions, httpsCallable } = await import('firebase/functions');
-          // 使用 Firebase Admin 更新密碼（需要 Cloud Function）
-          // 簡易方式：直接用 updatePassword（需要該用戶最近登入）
-          alert('密碼更新功能需透過 Firebase Console 操作，或聯繫系統管理員');
-        } catch {}
+      if (editForm.newPassword && editForm.newPassword.length >= 1) {
+        // 直接更新 Firestore 的 pin 欄位（登入時用此欄位查詢）
+        await updateDoc(doc(db, 'users', editForm.id), { pin: editForm.newPassword });
       }
       setEditingEmp(null);
       await fetchAll();
@@ -500,8 +496,8 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                   <input value={editForm.name||''} onChange={e => onEditChange('name', e.target.value)} />
                 </label>
                 {/* 新密碼 */}
-                <label style={{ ...labelStyle, flex: '1 1 160px' }}><span>新密碼（留空不修改）</span>
-                  <input type="text" value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value)} placeholder="輸入新密碼" />
+                <label style={{ ...labelStyle, flex: '1 1 160px' }}><span>新密碼（10位數字或英文）</span>
+                  <input type="text" maxLength={10} value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0,10))} placeholder="輸入最多10碼" />
                 </label>
                 {/* 職位 */}
                 <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>職位</span>
