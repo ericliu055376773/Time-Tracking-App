@@ -138,6 +138,10 @@ export default function AdminDashboard() {
   async function handleDeleteEmployee(empId) {
     try {
       await deleteDoc(doc(db, 'users', empId));
+      // 同時刪除該員工的打卡紀錄
+      const punchSnap = await getDocs(query(collection(db, 'punches'), where('uid', '==', empId)));
+      const delPunches = punchSnap.docs.map(d => deleteDoc(doc(db, 'punches', d.id)));
+      await Promise.all(delPunches);
       await fetchAll();
     } catch (err) { alert('刪除失敗：' + err.message); }
   }
@@ -549,6 +553,11 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                       {hired ? `到職：${hired.toLocaleDateString('zh-TW')}` : '未設定到職日'}
                       {annualDays !== null && <span style={{ marginLeft: 8, color: 'var(--green)' }}>🌴 特休 {annualDays} 天</span>}
                     </div>
+                    {emp.pin && (
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--mono)' }}>
+                        PIN：{emp.pin}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
