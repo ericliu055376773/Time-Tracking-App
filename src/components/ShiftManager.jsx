@@ -131,7 +131,11 @@ export default function ShiftManager() {
                     border: `1px solid ${shift.color}44`, flexShrink: 0,
                   }}>{shift.id}</div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>{shift.name}</div>
+                    <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
+                      <span style={{ fontFamily: 'var(--mono)', color: shift.color }}>{shift.id}</span>
+                      <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
+                      {shift.name}
+                    </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
                       <span style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--green)' }}>{shift.start}</span>
                       <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>→</span>
@@ -161,9 +165,9 @@ export default function ShiftManager() {
               <button onClick={() => setShowForm(false)} style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-secondary)', padding: '4px 9px', borderRadius: 6 }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: 12 }}>
-                <label style={lbl}>
-                  <span>代號（可修改）</span>
+              <label style={lbl}>
+                <span>班別代號 · 名稱</span>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <input
                     value={form.id} maxLength={1}
                     onChange={e => {
@@ -171,14 +175,12 @@ export default function ShiftManager() {
                       setForm(f => ({ ...f, id: v }));
                     }}
                     placeholder="A"
-                    style={{ textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700 }}
+                    style={{ width: 56, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: form.color, flexShrink: 0 }}
                   />
-                </label>
-                <label style={lbl}>
-                  <span>班別名稱</span>
-                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="例如：早班" />
-                </label>
-              </div>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>·</span>
+                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="例如：早班" style={{ flex: 1 }} />
+                </div>
+              </label>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <label style={lbl}><span>上班時間</span><input type="time" value={form.start} onChange={e => setForm(f => ({ ...f, start: e.target.value }))} /></label>
