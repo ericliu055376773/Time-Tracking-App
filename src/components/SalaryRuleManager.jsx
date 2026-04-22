@@ -20,6 +20,7 @@ const DEFAULT_RULES = {
   customItems: [],
   monthlyOTMinutes: 10,   // 月薪加班計算單位（分鐘）
   hourlyOTMinutes: 10,    // 時薪加班計算單位（分鐘）
+  salaryRevealDay: 30,    // 薪資明細開放日（每月幾號）
 };
 
 let idCounter = Date.now();
@@ -154,6 +155,24 @@ export default function SalaryRuleManager() {
               {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天`}
             </span>
           </div>
+
+          {/* 薪資明細開放日設定 */}
+          <DeductCard title="薪資明細開放日" prefix="📅" color="var(--amber)"
+            isEditing={editing.revealDay} onToggleEdit={() => toggleEdit('revealDay')}>
+            {editing.revealDay ? (
+              <EditRow>
+                <span style={muteTxt}>每月</span>
+                <NumInput value={rules.salaryRevealDay || 30} onChange={v => update('salaryRevealDay', Math.min(31, Math.max(1, v)))} width={70} />
+                <span style={muteTxt}>號（含）之後員工可查看薪資明細與預估實領薪資</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每月</span>
+                <span style={whiteVal}>{rules.salaryRevealDay || 30}</span>
+                <span style={muteTxt}>號後員工可查看薪資明細</span>
+              </DisplayRow>
+            )}
+          </DeductCard>
 
           {/* 1. 勞保扣款 */}
           <DeductCard
@@ -638,4 +657,3 @@ function OTRow({ label, formula, result, color }) {
 
 const muteTxt = { fontSize: 13, color: 'var(--text-muted)' };
 const whiteVal = { fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: '#ffffff' };
-
