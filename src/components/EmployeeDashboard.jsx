@@ -3,7 +3,7 @@ import {
   collection, addDoc, query, where, orderBy, getDocs,
   serverTimestamp, Timestamp, doc, getDoc
 } from 'firebase/firestore';
-import { db } from '../firebase';x
+import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import { calcSalaryFromPunches, fmtMoney, fmtHours } from '../hooks/useSalaryCalc';
 import { getNetworkInfo, isAllowedNetwork } from '../hooks/useNetworkCheck';
