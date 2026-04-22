@@ -44,9 +44,8 @@ export default function ShiftManager() {
   }
 
   function openAdd() {
-    const usedIds = shifts.map(s => s.id);
-    const nextId = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(c => !usedIds.includes(c)) || '';
-    setForm({ id: nextId, name: nextId + ' 班', start: '09:00', end: '18:00', color: SHIFT_COLORS[shifts.length % SHIFT_COLORS.length] });
+    const nextId = String(Date.now());
+    setForm({ id: nextId, name: '', start: '09:00', end: '18:00', color: SHIFT_COLORS[shifts.length % SHIFT_COLORS.length] });
     setEditingId(null);
     setFormError('');
     setShowForm(true);
@@ -60,22 +59,17 @@ export default function ShiftManager() {
   }
 
   async function handleSave() {
-    if (!form.id.trim()) { setFormError('請輸入班別代號'); return; }
     if (!form.name.trim()) { setFormError('請輸入班別名稱'); return; }
     if (!form.start || !form.end) { setFormError('請設定上下班時間'); return; }
-    if (!/^[A-Z]$/.test(form.id.toUpperCase())) { setFormError('班別代號必須是單一英文字母（A-Z）'); return; }
-    const id = form.id.toUpperCase();
 
-    // 新增時檢查代號重複，編輯時允許改代號（但不能跟其他班別衝突）
-    const conflict = shifts.find(s => s.id === id && s.id !== editingId);
-    if (conflict) { setFormError(`班別代號 ${id} 已存在`); return; }
+    // 用名稱做 ID（編輯時保留原ID，新增時用 timestamp）
+    const id = editingId || form.id || String(Date.now());
 
     let newList;
     if (editingId) {
-      // 編輯：用新 id 取代舊 id
-      newList = shifts.map(s => s.id === editingId ? { ...form, id } : s);
+      newList = shifts.map(s => s.id === editingId ? { ...form, id, name: form.name.trim() } : s);
     } else {
-      newList = [...shifts, { ...form, id }].sort((a, b) => a.id.localeCompare(b.id));
+      newList = [...shifts, { ...form, id, name: form.name.trim() }];
     }
     await saveShifts(newList);
     setShowForm(false);
@@ -108,7 +102,7 @@ export default function ShiftManager() {
           <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--text-primary)' }}>班別設定</div>
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>目前共 {shifts.length} 個班別</div>
         </div>
-        <button onClick={openAdd} disabled={shifts.length >= 26} style={{
+        <button onClick={openAdd} style={{
           padding: '9px 18px', background: 'var(--amber)', color: '#000',
           border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
         }}>+ 新增班別</button>
@@ -129,11 +123,9 @@ export default function ShiftManager() {
                     justifyContent: 'center', fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)',
                     background: shift.color + '22', color: shift.color,
                     border: `1px solid ${shift.color}44`, flexShrink: 0,
-                  }}>{shift.id}</div>
+                  }}>{shift.name.slice(0,2)}</div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
-                      <span style={{ fontFamily: 'var(--mono)', color: shift.color }}>{shift.id}</span>
-                      <span style={{ color: 'var(--text-muted)', margin: '0 6px' }}>·</span>
                       {shift.name}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4 }}>
@@ -166,20 +158,8 @@ export default function ShiftManager() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <label style={lbl}>
-                <span>班別代號 · 名稱</span>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <input
-                    value={form.id} maxLength={1}
-                    onChange={e => {
-                      const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
-                      setForm(f => ({ ...f, id: v }));
-                    }}
-                    placeholder="A"
-                    style={{ width: 56, textAlign: 'center', fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 700, color: form.color, flexShrink: 0 }}
-                  />
-                  <span style={{ color: 'var(--text-muted)', fontSize: 16 }}>·</span>
-                  <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="例如：早班" style={{ flex: 1 }} />
-                </div>
+                <span>班別名稱</span>
+                <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="例如：早班" />
               </label>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -237,7 +217,7 @@ export default function ShiftManager() {
               </div>
               <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8 }}>確認刪除「{deleteConfirm.name}」？</div>
               <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
-                班別代號 <span style={{ fontFamily: 'var(--mono)', color: deleteConfirm.color, fontWeight: 700 }}>{deleteConfirm.id}</span>（{deleteConfirm.start} - {deleteConfirm.end}）將被永久刪除。
+                「{deleteConfirm.name}」（{deleteConfirm.start} - {deleteConfirm.end}）將被永久刪除。
               </div>
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
