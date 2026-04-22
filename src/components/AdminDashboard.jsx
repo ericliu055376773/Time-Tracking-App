@@ -493,7 +493,7 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                 </label>
                 {/* 新密碼 */}
                 <label style={{ ...labelStyle, flex: '1 1 160px' }}><span>新密碼（留空不修改）</span>
-                  <input type="password" value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value)} placeholder="輸入新密碼" />
+                  <input type="text" value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value)} placeholder="輸入新密碼" />
                 </label>
                 {/* 職位 */}
                 <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>職位</span>
@@ -555,7 +555,7 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                     </div>
                     {emp.pin && (
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--mono)' }}>
-                        PIN：{emp.pin}
+                        密碼：<span style={{ color: 'var(--text-primary)', letterSpacing: '0.1em' }}>{emp.pin}</span>
                       </div>
                     )}
                   </div>
