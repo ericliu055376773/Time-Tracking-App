@@ -30,6 +30,8 @@ export default function EmployeeDashboard() {
   const [networkStatus, setNetworkStatus] = useState({ checking: true, allowed: false, reason: '', matchedNetwork: '' });
   const [todayShifts, setTodayShifts] = useState({ shift1: null, shift2: null });
   const [shiftWarning, setShiftWarning] = useState('');
+  const [salaryRevealDay, setSalaryRevealDay] = useState(30);
+  const [confirmPunch, setConfirmPunch] = useState(null); // { type, label, time, lateMin, validation }
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -51,6 +53,18 @@ export default function EmployeeDashboard() {
       }
     }
     checkNetwork();
+  }, []);
+
+  useEffect(() => {
+    async function loadSalarySettings() {
+      try {
+        const snap = await getDoc(doc(db, 'settings', 'salaryRules'));
+        if (snap.exists() && snap.data().salaryRevealDay) {
+          setSalaryRevealDay(snap.data().salaryRevealDay);
+        }
+      } catch {}
+    }
+    loadSalarySettings();
   }, []);
 
   useEffect(() => {
@@ -154,7 +168,8 @@ export default function EmployeeDashboard() {
     }
   }
 
-  async function handlePunch() {
+  // 按下打卡按鈕 → 先跳確認 Modal
+  function handlePunch() {
     if (!user || punchLoading) return;
     if (!networkStatus.allowed) { alert(networkStatus.reason || '請連接辦公室 WiFi'); return; }
     if (!punchState.nextType) { alert('今日打卡已完成！'); return; }
@@ -163,11 +178,36 @@ export default function EmployeeDashboard() {
     const validation = validatePunchTime(punchState.nextType, punchState.currentShift);
     if (!validation.ok) { setShiftWarning(validation.msg); return; }
     setShiftWarning('');
+
+    // 計算距離上班時間（供 Modal 顯示）
+    const lastIn = todayPunches.filter(p => p.type === 'in').slice(-1)[0];
+    let workedMinutes = null;
+    if (punchState.nextType === 'out' && lastIn?.timestamp?.toDate) {
+      const diff = Math.floor((now - lastIn.timestamp.toDate()) / 60000);
+      workedMinutes = diff;
+    }
+
+    setConfirmPunch({
+      type: punchState.nextType,
+      label: punchState.label,
+      time: format(now, 'HH:mm'),
+      lateMin: validation.lateMinutes || 0,
+      overMin: validation.overtimeMinutes || 0,
+      workedMinutes,
+      validation,
+    });
+  }
+
+  // 確認後才真的打卡
+  async function doConfirmPunch() {
+    if (!confirmPunch) return;
+    const { type, validation } = confirmPunch;
+    setConfirmPunch(null);
     setPunchLoading(true);
     try {
       await addDoc(collection(db, 'punches'), {
         uid: user.uid, userName: profile?.name || '',
-        type: punchState.nextType,
+        type,
         timestamp: serverTimestamp(),
         date: format(now, 'yyyy-MM-dd'),
         note: note.trim(),
@@ -201,6 +241,7 @@ export default function EmployeeDashboard() {
       totalOvertimeHours={totalOvertimeHours}
       totalSalary={totalSalary}
       salaryBreakdown={salaryBreakdown}
+      salaryRevealDay={salaryRevealDay}
     />;
   }
 
@@ -326,6 +367,84 @@ export default function EmployeeDashboard() {
             </button>
           </div>
 
+          {/* 確認打卡 Modal */}
+          {confirmPunch && (
+            <div style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+              backdropFilter: 'blur(4px)',
+            }}>
+              <div style={{
+                background: 'var(--bg-card)', border: '1px solid var(--border)',
+                borderRadius: 16, padding: '28px 24px', maxWidth: 340, width: '90%',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.4)',
+              }} className="fade-in">
+                {/* 圖示 */}
+                <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                  <div style={{
+                    width: 60, height: 60, borderRadius: '50%', margin: '0 auto 12px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26,
+                    background: confirmPunch.type === 'in' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)',
+                    border: `2px solid ${confirmPunch.type === 'in' ? 'var(--amber)' : 'var(--red)'}`,
+                  }}>
+                    {confirmPunch.type === 'in' ? '▶' : '⏹'}
+                  </div>
+                  <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>
+                    確認{confirmPunch.label}？
+                  </div>
+                  <div style={{ fontFamily: 'var(--mono)', fontSize: 28, fontWeight: 300, color: confirmPunch.type === 'in' ? 'var(--amber)' : 'var(--red)' }}>
+                    {confirmPunch.time}
+                  </div>
+                </div>
+
+                {/* 資訊 */}
+                <div style={{ background: 'var(--bg-base)', borderRadius: 10, padding: '12px 16px', marginBottom: 16, fontSize: 13 }}>
+                  {confirmPunch.type === 'in' && confirmPunch.lateMin > 0 && (
+                    <div style={{ color: 'var(--amber)', marginBottom: 4 }}>⚠️ 遲到 {confirmPunch.lateMin} 分鐘</div>
+                  )}
+                  {confirmPunch.type === 'in' && confirmPunch.lateMin === 0 && (
+                    <div style={{ color: 'var(--green)', marginBottom: 4 }}>✓ 準時上班</div>
+                  )}
+                  {confirmPunch.type === 'out' && confirmPunch.workedMinutes !== null && (
+                    <div style={{ color: 'var(--text-secondary)' }}>
+                      本次工作時間：{Math.floor(confirmPunch.workedMinutes / 60)}h {confirmPunch.workedMinutes % 60}m
+                      {confirmPunch.workedMinutes < 60 && (
+                        <div style={{ color: 'var(--amber)', marginTop: 4 }}>⚠️ 工作時間不足 1 小時，請確認是否誤按</div>
+                      )}
+                    </div>
+                  )}
+                  {confirmPunch.overMin > 0 && (
+                    <div style={{ color: 'var(--amber)', marginTop: 4 }}>加班 {confirmPunch.overMin} 分鐘</div>
+                  )}
+                </div>
+
+                {/* 按鈕 */}
+                <div style={{ display: 'flex', gap: 10 }}>
+                  <button
+                    onClick={() => setConfirmPunch(null)}
+                    style={{
+                      flex: 1, padding: 12, borderRadius: 10, fontSize: 14, fontWeight: 600,
+                      background: 'var(--bg-elevated)', color: 'var(--text-secondary)',
+                      border: '1px solid var(--border)', cursor: 'pointer',
+                    }}>
+                    取消
+                  </button>
+                  <button
+                    onClick={doConfirmPunch}
+                    style={{
+                      flex: 2, padding: 12, borderRadius: 10, fontSize: 14, fontWeight: 700,
+                      background: confirmPunch.type === 'in' ? 'var(--amber)' : 'var(--red-glow)',
+                      color: confirmPunch.type === 'in' ? '#000' : 'var(--red)',
+                      border: confirmPunch.type === 'out' ? '1px solid rgba(239,68,68,0.4)' : 'none',
+                      cursor: 'pointer',
+                    }}>
+                    確認{confirmPunch.label}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* 打卡紀錄 */}
           <div>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -383,8 +502,15 @@ function StatRow({ label, value, highlight, color }) {
 }
 
 // ── 本月統計頁面元件 ─────────────────────────────────────────
-function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown }) {
+function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown, salaryRevealDay }) {
   const attendedDays = dailyRecords.filter(r => r.inTime).length;
+  const revealDay = salaryRevealDay || 30;
+  const today = new Date();
+  const todayDay = today.getDate();
+  const currentMonth = format(today, 'yyyy-MM');
+  const isCurrentMonth = selectedMonth === currentMonth;
+  // 薪資明細是否可見：查歷史月份 或 當月已到開放日
+  const salaryVisible = !isCurrentMonth || todayDay >= revealDay;
 
   return (
     <div style={{ padding: '12px', maxWidth: 600, margin: '0 auto' }} className="fade-in">
@@ -413,8 +539,8 @@ function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRec
         ))}
       </div>
 
-      {/* 月薪制：薪資明細 */}
-      {profile?.payType === 'monthly' && salaryBreakdown && (
+      {/* 月薪制：薪資明細（月底才開放） */}
+      {profile?.payType === 'monthly' && salaryBreakdown && salaryVisible && (
         <div className="card" style={{ marginBottom: 14 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-muted)', marginBottom: 14 }}>薪資明細</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -446,16 +572,24 @@ function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRec
         </div>
       )}
 
-      {/* 實領薪資 */}
-      <div className="card" style={{ background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.25)', marginBottom: 14 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 2 }}>預估實領薪資</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{selectedMonth}（不含紅利）</div>
+      {/* 實領薪資（月底才開放） */}
+      {salaryVisible ? (
+        <div className="card" style={{ background: 'var(--amber-glow)', border: '1px solid rgba(245,158,11,0.25)', marginBottom: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--amber)', marginBottom: 2 }}>預估實領薪資</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{selectedMonth}（不含紅利）</div>
+            </div>
+            <div style={{ fontFamily: 'var(--mono)', fontSize: 26, fontWeight: 700, color: 'var(--amber)' }}>{fmtMoney(totalSalary)}</div>
           </div>
-          <div style={{ fontFamily: 'var(--mono)', fontSize: 26, fontWeight: 700, color: 'var(--amber)' }}>{fmtMoney(totalSalary)}</div>
         </div>
-      </div>
+      ) : (
+        <div className="card" style={{ marginBottom: 14, border: '1px solid var(--border)', textAlign: 'center', padding: '18px 16px' }}>
+          <div style={{ fontSize: 20, marginBottom: 8 }}>🔒</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>薪資明細將於每月 {SALARY_REVEAL_DAY} 號開放查看</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>目前為 {todayDay} 號，還需等待 {SALARY_REVEAL_DAY - todayDay} 天</div>
+        </div>
+      )}
 
       {/* 每日打卡明細 */}
       <div>
