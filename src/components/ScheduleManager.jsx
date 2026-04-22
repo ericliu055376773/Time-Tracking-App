@@ -160,7 +160,7 @@ export default function ScheduleManager() {
                           {shifts.map(s => <option key={s.id} value={s.id}>{s.name.slice(0,4)} {s.start}</option>)}
                         </select>
                       </div>
-                      {/* 晚班 */
+                      {/* 晚班 */}
                       <div>
                         <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 2, textAlign: 'center' }}>晚班</div>
                         <select value={shift2} onChange={e => setAssignment(emp.id, d.date, 'shift2', e.target.value)}
