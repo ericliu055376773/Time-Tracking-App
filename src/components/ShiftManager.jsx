@@ -123,7 +123,7 @@ export default function ShiftManager() {
                     justifyContent: 'center', fontSize: 20, fontWeight: 700, fontFamily: 'var(--mono)',
                     background: shift.color + '22', color: shift.color,
                     border: `1px solid ${shift.color}44`, flexShrink: 0,
-                  }}>{shift.name.slice(0,2)}</div>
+                  }}>{shift.name.slice(0,1)}</div>
                   <div>
                     <div style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)' }}>
                       {shift.name}
@@ -236,4 +236,3 @@ const lbl = {
   fontSize: 11, fontWeight: 700, letterSpacing: '0.07em',
   color: 'var(--text-muted)', textTransform: 'uppercase',
 };
-
