@@ -119,7 +119,7 @@ export default function AdminDashboard() {
         name: editForm.name,
         positionId: editForm.positionId || '',
         payType: editForm.payType, hourlyRate: Number(editForm.hourlyRate),
-        monthlySalary: Number(editForm.monthlySalary), mealAllowance: Number(editForm.mealAllowance||0), overtimeEnabled: !!editForm.overtimeEnabled,
+        hiredAt: editForm.hiredAt ? Timestamp.fromDate(new Date(editForm.hiredAt)) : null,
       });
       // 修改密碼
       if (editForm.newPassword && editForm.newPassword.length >= 6) {
@@ -382,35 +382,76 @@ function SalaryTab({ summaries, month, positions }) {
 }
 
 function RecordsTab({ punches, employees }) {
+  const [filterUid, setFilterUid] = React.useState('');
   const empMap = Object.fromEntries(employees.map(e => [e.id, e.name]));
+  const filtered = filterUid ? punches.filter(p => p.uid === filterUid) : punches;
+  const sorted = [...filtered].sort((a,b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
   return (
-    <div className="table-wrapper">
-      <table>
-        <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>狀態</th><th>備註</th></tr></thead>
-        <tbody>
-          {[...punches].sort((a,b) => b.timestamp?.toMillis() - a.timestamp?.toMillis()).map(p => (
-            <tr key={p.id}>
-              <td style={{ fontWeight: 500 }}>{empMap[p.uid] || p.userName}</td>
-              <td><span className={`badge ${p.type === 'in' ? 'badge-green' : 'badge-red'}`}>{p.type === 'in' ? '▶ 上班' : '⏹ 下班'}</span></td>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{p.timestamp?.toDate() ? format(p.timestamp.toDate(), 'MM/dd HH:mm:ss') : '--'}</td>
-              <td style={{ fontSize: 12 }}>
-                {p.type === 'in' && p.lateMinutes > 0
-                  ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>遲到 {p.lateMinutes} 分鐘</span>
-                  : p.type === 'in'
-                  ? <span style={{ color: 'var(--green)' }}>準時</span>
-                  : p.overtimeMinutes > 0
-                  ? <span style={{ color: 'var(--amber)' }}>加班 {p.overtimeMinutes} 分鐘</span>
-                  : '--'}
-                {p.isMakeup && <span style={{ color: 'var(--text-muted)', fontSize: 10, marginLeft: 4 }}>補打</span>}
-              </td>
-              <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note || '--'}</td>
-            </tr>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      {/* 員工篩選 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>篩選員工：</span>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <button onClick={() => setFilterUid('')} style={{
+            padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: filterUid === '' ? 700 : 400,
+            background: filterUid === '' ? 'var(--amber)' : 'var(--bg-elevated)',
+            color: filterUid === '' ? '#000' : 'var(--text-secondary)',
+            border: filterUid === '' ? 'none' : '1px solid var(--border)', cursor: 'pointer',
+          }}>全部員工</button>
+          {employees.map(e => (
+            <button key={e.id} onClick={() => setFilterUid(e.id)} style={{
+              padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: filterUid === e.id ? 700 : 400,
+              background: filterUid === e.id ? 'var(--amber)' : 'var(--bg-elevated)',
+              color: filterUid === e.id ? '#000' : 'var(--text-secondary)',
+              border: filterUid === e.id ? 'none' : '1px solid var(--border)', cursor: 'pointer',
+            }}>{e.name}</button>
           ))}
-          {punches.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
-        </tbody>
-      </table>
+        </div>
+        {filterUid && (
+          <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            共 {sorted.length} 筆
+          </span>
+        )}
+      </div>
+
+      <div className="table-wrapper">
+        <table>
+          <thead><tr><th>員工</th><th>類型</th><th>時間</th><th>狀態</th><th>備註</th></tr></thead>
+          <tbody>
+            {sorted.map(p => (
+              <tr key={p.id}>
+                <td style={{ fontWeight: 500 }}>{empMap[p.uid] || p.userName}</td>
+                <td><span className={`badge ${p.type === 'in' ? 'badge-green' : 'badge-red'}`}>{p.type === 'in' ? '▶ 上班' : '⏹ 下班'}</span></td>
+                <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{p.timestamp?.toDate() ? format(p.timestamp.toDate(), 'MM/dd HH:mm:ss') : '--'}</td>
+                <td style={{ fontSize: 12 }}>
+                  {p.type === 'in' && p.lateMinutes > 0
+                    ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>遲到 {p.lateMinutes} 分鐘</span>
+                    : p.type === 'in'
+                    ? <span style={{ color: 'var(--green)' }}>準時</span>
+                    : p.overtimeMinutes > 0
+                    ? <span style={{ color: 'var(--amber)' }}>加班 {p.overtimeMinutes} 分鐘</span>
+                    : '--'}
+                  {p.isMakeup && <span style={{ color: 'var(--text-muted)', fontSize: 10, marginLeft: 4 }}>補打</span>}
+                </td>
+                <td style={{ color: 'var(--text-secondary)', fontSize: 12 }}>{p.note || '--'}</td>
+              </tr>
+            ))}
+            {sorted.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>本月無打卡紀錄</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
+}
+
+function calcAnnualLeave(months) {
+  if (months < 6) return 0;
+  if (months < 12) return 3;
+  if (months < 24) return 7;
+  if (months < 36) return 10;
+  if (months < 60) return 14;
+  if (months < 120) return 15;
+  return Math.min(15 + Math.floor(months / 12) - 10, 30);
 }
 
 function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, onSave, onCancel, positions }) {
@@ -420,57 +461,94 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
       {employees.length === 0 && <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--text-muted)' }}>尚無員工，點右上角「新增員工」開始建立</div>}
       {employees.map(emp => {
         const empPos = posMap[emp.positionId];
+        // 計算年資和特休
+        const hired = emp.hiredAt?.toDate ? emp.hiredAt.toDate() : null;
+        const months = hired ? Math.floor((Date.now() - hired.getTime()) / (1000*60*60*24*30.44)) : null;
+        const annualDays = months !== null ? calcAnnualLeave(months) : null;
+        // 編輯時 hiredAt 格式
+        const hiredStr = editForm.hiredAt
+          ? (typeof editForm.hiredAt === 'string' ? editForm.hiredAt : editForm.hiredAt?.toDate?.().toISOString().slice(0,10))
+          : '';
+
         return (
           <div key={emp.id} className="card" style={{ padding: '16px 20px' }}>
             {editingEmp === emp.id ? (
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                <label style={{ ...labelStyle, flex: '1 1 130px' }}><span>姓名</span><input value={editForm.name||''} onChange={e => onEditChange('name', e.target.value)} /></label>
-                <label style={{ ...labelStyle, flex: '1 1 180px' }}><span>新密碼（留空不修改）</span><input type="password" value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value)} placeholder="輸入新密碼" /></label>
+                {/* 姓名 */}
+                <label style={{ ...labelStyle, flex: '1 1 130px' }}><span>姓名</span>
+                  <input value={editForm.name||''} onChange={e => onEditChange('name', e.target.value)} />
+                </label>
+                {/* 新密碼 */}
+                <label style={{ ...labelStyle, flex: '1 1 160px' }}><span>新密碼（留空不修改）</span>
+                  <input type="password" value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value)} placeholder="輸入新密碼" />
+                </label>
+                {/* 職位 */}
                 <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>職位</span>
                   <select value={editForm.positionId||''} onChange={e => onEditChange('positionId', e.target.value)}>
                     <option value="">— 未設定 —</option>
                     {(positions||[]).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </label>
+                {/* 薪資類型 */}
                 <label style={{ ...labelStyle, flex: '1 1 110px' }}><span>薪資類型</span>
                   <select value={editForm.payType||'hourly'} onChange={e => onEditChange('payType', e.target.value)}>
-                    <option value="hourly">時薪制</option><option value="monthly">月薪制</option>
+                    <option value="hourly">時薪制</option>
+                    <option value="monthly">月薪制</option>
                   </select>
                 </label>
-                {editForm.payType === 'hourly'
-                  ? <label style={{ ...labelStyle, flex: '1 1 100px' }}><span>時薪</span><input type="number" value={editForm.hourlyRate||0} onChange={e => onEditChange('hourlyRate', e.target.value)} /></label>
-                  : <><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月薪</span><input type="number" value={editForm.monthlySalary||0} onChange={e => onEditChange('monthlySalary', e.target.value)} /></label><label style={{ ...labelStyle, flex: '1 1 120px' }}><span>月餐費</span><input type="number" value={editForm.mealAllowance||0} onChange={e => onEditChange('mealAllowance', e.target.value)} /></label></>
-                }
-                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', paddingBottom: 1 }}>
-                  <input type="checkbox" checked={!!editForm.overtimeEnabled} onChange={e => onEditChange('overtimeEnabled', e.target.checked)} style={{ width: 'auto' }} />
-                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>加班費</span>
+                {/* 時薪（時薪制才顯示） */}
+                {editForm.payType === 'hourly' && (
+                  <label style={{ ...labelStyle, flex: '1 1 100px' }}><span>時薪（元）</span>
+                    <input type="number" value={editForm.hourlyRate||0} onChange={e => onEditChange('hourlyRate', e.target.value)} />
+                  </label>
+                )}
+                {/* 月薪制：顯示職位薪資（唯讀） */}
+                {editForm.payType === 'monthly' && (
+                  <div style={{ flex: '1 1 200px', padding: '8px 12px', background: 'var(--bg-base)', borderRadius: 8, border: '1px solid var(--border)', fontSize: 12 }}>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: 4, fontSize: 11, fontWeight: 700 }}>薪資（依職位自動同步）</div>
+                    {posMap[editForm.positionId] ? (
+                      <>
+                        <div>底薪：<span style={{ color: 'var(--amber)' }}>${(posMap[editForm.positionId].baseSalary||0).toLocaleString()}</span></div>
+                        <div>餐費：<span style={{ color: 'var(--amber)' }}>${(posMap[editForm.positionId].mealAllowance||0).toLocaleString()}</span></div>
+                        <div>全勤：<span style={{ color: 'var(--green)' }}>${(posMap[editForm.positionId].fullAttendanceBonus||0).toLocaleString()}</span></div>
+                      </>
+                    ) : <div style={{ color: 'var(--text-muted)' }}>請先選擇職位</div>}
+                  </div>
+                )}
+                {/* 到職日 */}
+                <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>到職日</span>
+                  <input type="date" value={hiredStr} onChange={e => onEditChange('hiredAt', e.target.value)} />
                 </label>
+                {/* 儲存/取消 */}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={onSave} style={{ padding: '9px 16px', background: 'var(--green)', color: '#000', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>儲存</button>
                   <button onClick={onCancel} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>取消</button>
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{ width: 38, height: 38, borderRadius: '50%', background: empPos ? empPos.color+'22' : 'var(--amber-glow)', border: `1px solid ${empPos ? empPos.color+'44' : 'rgba(245,158,11,0.3)'}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--mono)', fontSize: 16, color: empPos ? empPos.color : 'var(--amber)' }}>
                     {emp.name?.[0]?.toUpperCase()}
                   </div>
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {emp.name}
-                      {emp.overtimeEnabled && <span className="badge badge-amber" style={{ fontSize: 10 }}>加班費</span>}
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{emp.name}</div>
+                    <div style={{ fontSize: 11, color: empPos ? empPos.color : 'var(--text-muted)', marginTop: 1 }}>
+                      {empPos ? empPos.name : '未設定職位'} · {emp.payType === 'hourly' ? `時薪 $${emp.hourlyRate}/hr` : '月薪制'}
                     </div>
-                    <div style={{ fontSize: 11, color: empPos ? empPos.color : 'var(--text-muted)', marginTop: 2 }}>
-                      {empPos ? empPos.name : '未設定職位'}
+                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1 }}>
+                      {hired ? `到職：${hired.toLocaleDateString('zh-TW')}` : '未設定到職日'}
+                      {annualDays !== null && <span style={{ marginLeft: 8, color: 'var(--green)' }}>🌴 特休 {annualDays} 天</span>}
                     </div>
                   </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 13, color: 'var(--amber)' }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(emp.monthlySalary||0).toLocaleString()}/mo`}</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</div>
-                  </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {empPos && emp.payType === 'monthly' && (
+                    <div style={{ textAlign: 'right', fontSize: 11, color: 'var(--text-muted)' }}>
+                      <div>底薪 <span style={{ color: 'var(--amber)', fontFamily: 'var(--mono)' }}>${(empPos.baseSalary||0).toLocaleString()}</span></div>
+                      <div>餐費 <span style={{ color: 'var(--amber)', fontFamily: 'var(--mono)' }}>${(empPos.mealAllowance||0).toLocaleString()}</span></div>
+                    </div>
+                  )}
                   <button onClick={() => onEdit(emp)} style={{ padding: '7px 14px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}>編輯</button>
                 </div>
               </div>
