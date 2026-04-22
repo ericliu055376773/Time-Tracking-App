@@ -86,7 +86,7 @@ export default function ScheduleManager() {
               padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 700,
               background: s.color + '22', border: `1px solid ${s.color}44`, color: s.color,
             }}>
-              {s.id} {s.start}-{s.end}
+              {s.name.slice(0,2)} {s.start}-{s.end}
             </div>
           ))}
         </div>
@@ -157,10 +157,10 @@ export default function ScheduleManager() {
                             cursor: 'pointer',
                           }}>
                           <option value="">-- 休</option>
-                          {shifts.map(s => <option key={s.id} value={s.id}>{s.id} {s.start}</option>)}
+                          {shifts.map(s => <option key={s.id} value={s.id}>{s.name.slice(0,4)} {s.start}</option>)}
                         </select>
                       </div>
-                      {/* 晚班 */}
+                      {/* 晚班 */
                       <div>
                         <div style={{ fontSize: 9, color: 'var(--text-muted)', marginBottom: 2, textAlign: 'center' }}>晚班</div>
                         <select value={shift2} onChange={e => setAssignment(emp.id, d.date, 'shift2', e.target.value)}
@@ -173,7 +173,7 @@ export default function ScheduleManager() {
                             cursor: 'pointer',
                           }}>
                           <option value="">-- 無</option>
-                          {shifts.map(s => <option key={s.id} value={s.id}>{s.id} {s.start}</option>)}
+                          {shifts.map(s => <option key={s.id} value={s.id}>{s.name.slice(0,4)} {s.start}</option>)}
                         </select>
                       </div>
                     </td>
