@@ -497,7 +497,7 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                 </label>
                 {/* 新密碼 */}
                 <label style={{ ...labelStyle, flex: '1 1 160px' }}><span>新密碼（10位數字或英文）</span>
-                  <input type="text" maxLength={10} value={editForm.newPassword||''} onChange={e => onEditChange('newPassword', e.target.value.replace(/[^a-zA-Z0-9]/g, '').slice(0,10))} placeholder="輸入最多10碼" />
+                  <input type="text" maxLength={10} value={editForm.newPassword||''} onChange={e => { const v = e.target.value.split('').filter(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')).join('').slice(0,10); onEditChange('newPassword', v); }} placeholder="輸入最多10碼" />
                 </label>
                 {/* 職位 */}
                 <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>職位</span>
