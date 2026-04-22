@@ -663,7 +663,7 @@ function WifiSettings() {
           <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '12px 14px', marginBottom: 14, fontSize: 12, lineHeight: 1.8, fontFamily: 'var(--mono)' }}>
             <div>公共 IP：<span style={{ color: 'var(--amber)' }}>{currentInfo.publicIP || '無法取得'}</span></div>
             <div>本地 IP：<span style={{ color: 'var(--amber)' }}>{currentInfo.localIP || '無法取得'}</span></div>
-            <div>子網路：<span style={{ color: 'var(--amber)' }}>{currentInfo.localIP ? currentInfo.localIP.split('.').slice(0,3).join('.')+'.x' : '無法取得'}</span></div>
+            <div>子網路：<span style={{ color: 'var(--amber)' }}>{currentInfo.localIP ? `${currentInfo.localIP.split('.').slice(0,3).join('.')}.x` : '無法取得'}</span></div>
           </div>
         )}
         <div style={{ display: 'flex', gap: 10 }}>
@@ -687,7 +687,7 @@ function WifiSettings() {
             <div>
               <div style={{ fontWeight: 600, fontSize: 14 }}>{n.name}</div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 3 }}>
-                IP：{n.publicIP || '--'} · 子網路：{n.localSubnet ? n.localSubnet+'.x' : '--'}
+                IP：{n.publicIP || '--'} · 子網路：{n.localSubnet ? `${n.localSubnet}.x` : '--'}
               </div>
             </div>
             <button onClick={() => removeNetwork(i)} style={{
