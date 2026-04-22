@@ -143,6 +143,24 @@ export default function SalaryRuleManager() {
         </div>
       </div>
 
+      {/* 薪資明細開放日設定（永遠顯示，不受 Tab 影響） */}
+      <DeductCard title="薪資明細開放日" prefix="📅" color="var(--amber)"
+        isEditing={editing.revealDay} onToggleEdit={() => toggleEdit('revealDay')}>
+        {editing.revealDay ? (
+          <EditRow>
+            <span style={muteTxt}>每月</span>
+            <NumInput value={rules.salaryRevealDay || 30} onChange={v => update('salaryRevealDay', Math.min(31, Math.max(1, v)))} width={70} />
+            <span style={muteTxt}>號（含）之後員工可查看薪資明細與預估實領薪資</span>
+          </EditRow>
+        ) : (
+          <DisplayRow>
+            <span style={muteTxt}>每月</span>
+            <span style={whiteVal}>{rules.salaryRevealDay || 30}</span>
+            <span style={muteTxt}>號後員工可查看薪資明細</span>
+          </DisplayRow>
+        )}
+      </DeductCard>
+
       {/* ════ 月薪制扣款設定 ════ */}
       {activeSection === 'monthly' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -155,24 +173,6 @@ export default function SalaryRuleManager() {
               {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天`}
             </span>
           </div>
-
-          {/* 薪資明細開放日設定 */}
-          <DeductCard title="薪資明細開放日" prefix="📅" color="var(--amber)"
-            isEditing={editing.revealDay} onToggleEdit={() => toggleEdit('revealDay')}>
-            {editing.revealDay ? (
-              <EditRow>
-                <span style={muteTxt}>每月</span>
-                <NumInput value={rules.salaryRevealDay || 30} onChange={v => update('salaryRevealDay', Math.min(31, Math.max(1, v)))} width={70} />
-                <span style={muteTxt}>號（含）之後員工可查看薪資明細與預估實領薪資</span>
-              </EditRow>
-            ) : (
-              <DisplayRow>
-                <span style={muteTxt}>每月</span>
-                <span style={whiteVal}>{rules.salaryRevealDay || 30}</span>
-                <span style={muteTxt}>號後員工可查看薪資明細</span>
-              </DisplayRow>
-            )}
-          </DeductCard>
 
           {/* 1. 勞保扣款 */}
           <DeductCard
