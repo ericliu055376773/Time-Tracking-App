@@ -119,7 +119,15 @@ export default function AdminDashboard() {
         name: editForm.name,
         positionId: editForm.positionId || '',
         payType: editForm.payType, hourlyRate: Number(editForm.hourlyRate),
-        hiredAt: editForm.hiredAt ? Timestamp.fromDate(new Date(editForm.hiredAt)) : null,
+        hiredAt: (() => {
+          if (!editForm.hiredAt) return null;
+          try {
+            const d = typeof editForm.hiredAt === 'string'
+              ? new Date(editForm.hiredAt + 'T00:00:00')
+              : editForm.hiredAt?.toDate?.() || null;
+            return d && !isNaN(d.getTime()) ? Timestamp.fromDate(d) : null;
+          } catch { return null; }
+        })(),
       });
       // 修改密碼
       if (editForm.newPassword && editForm.newPassword.length >= 6) {
