@@ -162,7 +162,7 @@ export default function ShiftManager() {
                   <span>代號</span>
                   <input value={form.id} maxLength={1}
                     onChange={e => {
-                      const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '');
+                      const raw = e.target.value.toUpperCase(); const v = raw.split('').filter(c => c >= 'A' && c <= 'Z').join('');
                       setForm(f => ({ ...f, id: v }));
                     }}
                     placeholder="A"
