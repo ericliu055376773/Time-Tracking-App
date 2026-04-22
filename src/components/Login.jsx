@@ -52,12 +52,13 @@ export default function Login() {
     if (pin.length !== 10) { setError('PIN 碼必須是 10 位數字'); return; }
     reset(); setLoading(true);
     try {
-      const q = query(collection(db, 'users'), where('empId', '==', empId.trim()));
+      // 用 PIN 查詢所有員工，找到對應的 email 登入
+      const q = query(collection(db, 'users'), where('pin', '==', pin), where('role', '==', 'employee'));
       const snap = await getDocs(q);
-      if (snap.empty) { setError('查無此員工編號'); setLoading(false); return; }
+      if (snap.empty) { setError('PIN 碼錯誤，請確認後再試'); setLoading(false); return; }
       await signInWithEmailAndPassword(auth, snap.docs[0].data().email, pin);
     } catch (err) {
-      const msgs = { 'auth/invalid-credential': '員工編號或 PIN 碼錯誤', 'auth/too-many-requests': '嘗試次數過多' };
+      const msgs = { 'auth/invalid-credential': 'PIN 碼錯誤', 'auth/too-many-requests': '嘗試次數過多，請稍後再試' };
       setError(msgs[err.code] || '登入失敗：' + err.message);
     }
     setLoading(false);
@@ -146,14 +147,10 @@ export default function Login() {
           {mode === 'login' && (
             <form onSubmit={handleEmployeeLogin} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <label style={lbl}>
-                <span>員工編號</span>
-                <input value={empId} onChange={e => setEmpId(e.target.value)} placeholder="例如：EMP123456" required />
-              </label>
-              <label style={lbl}>
                 <span>10 位 PIN 碼</span>
                 <input type="password" inputMode="numeric" maxLength={10}
                   value={pin} onChange={e => setPin(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                  placeholder="輸入 10 位數字" required />
+                  placeholder="輸入 10 位數字" required autoFocus />
                 <span style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>{pin.length} / 10 位</span>
               </label>
               {error && <div style={errStyle}>{error}</div>}
