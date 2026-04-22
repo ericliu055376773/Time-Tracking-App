@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminNav } from '../contexts/AdminNavContext';
 import {
   collection, query, getDocs, where, orderBy,
-  doc, updateDoc, setDoc, getDoc, addDoc, Timestamp, serverTimestamp
+  doc, updateDoc, setDoc, getDoc, addDoc, deleteDoc, Timestamp, serverTimestamp
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
 import { db, auth } from '../firebase';
@@ -135,6 +135,13 @@ export default function AdminDashboard() {
     } catch (err) { alert('更新失敗：' + err.message); }
   }
 
+  async function handleDeleteEmployee(empId) {
+    try {
+      await deleteDoc(doc(db, 'users', empId));
+      await fetchAll();
+    } catch (err) { alert('刪除失敗：' + err.message); }
+  }
+
   async function handleMakePunch() {
     setMakePunchError('');
     const { uid, date, time, type, shiftId, note } = makePunchForm;
@@ -228,6 +235,7 @@ export default function AdminDashboard() {
           onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))}
           onSave={handleUpdateEmployee}
           onCancel={() => setEditingEmp(null)}
+          onDelete={handleDeleteEmployee}
           positions={positions}
         />
       )}
@@ -454,7 +462,8 @@ function calcAnnualLeave(months) {
   return Math.min(15 + Math.floor(months / 12) - 10, 30);
 }
 
-function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, onSave, onCancel, positions }) {
+function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, onSave, onCancel, onDelete, positions }) {
+  const [deleteConfirm, setDeleteConfirm] = React.useState(null);
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -550,12 +559,31 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                     </div>
                   )}
                   <button onClick={() => onEdit(emp)} style={{ padding: '7px 14px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}>編輯</button>
+                  <button onClick={() => setDeleteConfirm(emp)} style={{ padding: '7px 14px', background: 'var(--red-glow)', color: 'var(--red)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 12 }}>刪除</button>
                 </div>
               </div>
             )}
           </div>
         );
       })}
+      {/* 刪除確認 Modal */}
+      {deleteConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(4px)' }}>
+          <div className="card fade-in" style={{ width: '90%', maxWidth: 360, padding: 28 }}>
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+              <div style={{ width: 52, height: 52, borderRadius: 12, background: 'var(--red-glow)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px', fontSize: 22 }}>🗑</div>
+              <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>確認刪除員工？</div>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+                「<span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{deleteConfirm.name}</span>」的帳號將被永久刪除，此操作無法復原。
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteConfirm(null)} style={{ flex: 1, padding: '11px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>取消</button>
+              <button onClick={() => { onDelete(deleteConfirm.id); setDeleteConfirm(null); }} style={{ flex: 1, padding: '11px', background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>確認刪除</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
