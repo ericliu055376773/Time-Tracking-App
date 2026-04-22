@@ -157,7 +157,7 @@ export default function ScheduleManager() {
                             cursor: 'pointer',
                           }}>
                           <option value="">-- 休</option>
-                          {shifts.map(s => <option key={s.id} value={s.id}>{s.id} {s.name} {s.start}</option>)}
+                          {shifts.map(s => <option key={s.id} value={s.id}>{s.id} {s.start}</option>)}
                         </select>
                       </div>
                       {/* 晚班 */}
@@ -173,7 +173,7 @@ export default function ScheduleManager() {
                             cursor: 'pointer',
                           }}>
                           <option value="">-- 無</option>
-                          {shifts.map(s => <option key={s.id} value={s.id}>{s.id} {s.name} {s.start}</option>)}
+                          {shifts.map(s => <option key={s.id} value={s.id}>{s.id} {s.start}</option>)}
                         </select>
                       </div>
                     </td>
