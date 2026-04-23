@@ -20,8 +20,12 @@ export default function SalaryReport({
 
   if (!employee || !month) return null;
 
+  // 注入職位資料供薪資計算使用
+  const empForCalc = employee._position
+    ? { ...employee, monthlySalary: employee._position.baseSalary, mealAllowance: employee._position.mealAllowance }
+    : employee;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } =
-    calcSalaryFromPunches(punches, employee, leaves);
+    calcSalaryFromPunches(punches, empForCalc, leaves);
 
   // 計算請假扣薪（時薪制才扣，月薪制已在計算中處理）
   const approvedLeaves = leaves.filter(
@@ -112,7 +116,8 @@ export default function SalaryReport({
           maxWidth: 680,
           maxHeight: '90vh',
           overflowY: 'auto',
-          margin: 20,
+          margin: '60px 20px 20px',
+          marginTop: 'max(60px, env(safe-area-inset-top, 20px))',
         }}
         className="fade-in"
       >
@@ -370,8 +375,8 @@ export default function SalaryReport({
                 // ── 月薪制明細 ──────────────────────────────
                 <>
                   {[
-                    { label: '底薪', sub: `$${(employee.monthlySalary||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
-                    { label: '餐費', sub: `$${(employee.mealAllowance||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
+                    { label: '底薪', sub: `$${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
+                    { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
                     { label: `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`, sub: salaryBreakdown.hasFullAttendance ? '達成全勤條件' : `未達標：${[salaryBreakdown.hasLate?'有遲到':'', salaryBreakdown.hasLeave?'有請假':'', salaryBreakdown.hasMissedPunch?'有忘打卡':''].filter(Boolean).join('、')}`, amount: salaryBreakdown.fullAttendancePay, isDeduction: false, dim: !salaryBreakdown.hasFullAttendance },
                     { label: '紅利', sub: '月底另行計算', amount: 0, isDeduction: false, dim: true },
                   ].map((item, i) => (
