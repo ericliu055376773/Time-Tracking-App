@@ -399,11 +399,72 @@ function SalaryTab({ summaries, month, positions }) {
 
 function RecordsTab({ punches, employees }) {
   const [filterUid, setFilterUid] = React.useState('');
+  const [schedule, setSchedule] = React.useState({});
+  const [shifts, setShifts] = React.useState([]);
+
+  React.useEffect(() => {
+    async function loadSchedule() {
+      try {
+        const [schedSnap, shiftSnap] = await Promise.all([
+          getDoc(doc(db, 'settings', 'schedule')),
+          getDoc(doc(db, 'settings', 'shifts')),
+        ]);
+        setSchedule(schedSnap.exists() ? schedSnap.data().assignments || {} : {});
+        setShifts(shiftSnap.exists() ? shiftSnap.data().list || [] : []);
+      } catch {}
+    }
+    loadSchedule();
+  }, []);
+
   const empMap = Object.fromEntries(employees.map(e => [e.id, e.name]));
   const filtered = filterUid ? punches.filter(p => p.uid === filterUid) : punches;
   const sorted = [...filtered].sort((a,b) => b.timestamp?.toMillis() - a.timestamp?.toMillis());
+
+  // 方案二：計算未打卡員工（過去7天有排班但無打卡）
+  const missedPunches = React.useMemo(() => {
+    const results = [];
+    const today = new Date();
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const dateStr = format(d, 'yyyy-MM-dd');
+      employees.forEach(emp => {
+        const key = `${emp.id}_${dateStr}`;
+        const assignment = schedule[key];
+        if (!assignment) return;
+        const hasShift = (typeof assignment === 'string' && assignment) ||
+          (assignment.shift1 || assignment.shift2);
+        if (!hasShift) return;
+        const hasPunch = punches.some(p => p.uid === emp.id && p.date === dateStr);
+        if (!hasPunch) {
+          results.push({ empId: emp.id, empName: emp.name, date: dateStr, assignment });
+        }
+      });
+    }
+    return results;
+  }, [employees, schedule, punches]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+      {/* 方案二：未打卡警示 */}
+      {missedPunches.length > 0 && (
+        <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 10, padding: '14px 18px' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--red)', marginBottom: 10 }}>
+            ⚠️ 近7天有排班但未打卡（共 {missedPunches.length} 筆）
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {missedPunches.map((m, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12, padding: '6px 10px', background: 'var(--bg-base)', borderRadius: 6 }}>
+                <span style={{ fontWeight: 600 }}>{m.empName}</span>
+                <span style={{ color: 'var(--text-muted)', fontFamily: 'var(--mono)' }}>{m.date}</span>
+                <span style={{ color: 'var(--red)', fontSize: 11 }}>未打卡・失去全勤</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 員工篩選 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>篩選員工：</span>
