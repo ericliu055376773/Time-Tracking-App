@@ -242,7 +242,7 @@ export default function EmployeeDashboard() {
 
   // ── 本月統計頁面 ────────────────────────────────────────────
   if (activePage === 'stats') {
-    return <StatsPage
+    return <div style={{ background: 'var(--bg-base)', minHeight: '100vh' }}><StatsPage
       profile={profile}
       punches={punches}
       loading={loading}
@@ -254,7 +254,7 @@ export default function EmployeeDashboard() {
       totalSalary={totalSalary}
       salaryBreakdown={salaryBreakdown}
       salaryRevealDay={salaryRevealDay}
-    />;
+    /></div>;
   }
 
   // ── 打卡介面 ─────────────────────────────────────────────────
@@ -525,7 +525,7 @@ function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRec
   const salaryVisible = !isCurrentMonth || todayDay >= revealDay;
 
   return (
-    <div style={{ padding: '12px', maxWidth: 600, margin: '0 auto', background: 'var(--bg-base)', minHeight: '100vh' }} className="fade-in">
+    <div style={{ padding: '12px', maxWidth: 600, margin: '0 auto', background: 'var(--bg-base)', minHeight: '100vh', color: 'var(--text-primary)' }} className="fade-in">
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 600 }}>本月統計</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>{profile?.name}</p>
