@@ -67,11 +67,16 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  const posMap2 = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const salarySummaries = employees.map(emp => {
     const punches = allPunches.filter(p => p.uid === emp.id);
     const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved');
-    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, emp);
-    const dailyRate = emp.payType === 'hourly' ? (emp.hourlyRate||0)*8 : (emp.monthlySalary||0)/30;
+    const empWithPos = { ...emp, _position: posMap2[emp.positionId] || null };
+    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos);
+    const pos2 = posMap2[emp.positionId];
+    const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
+    const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
+    const dailyRate = emp.payType === 'hourly' ? (emp.hourlyRate||0)*8 : (baseSal + mealSal)/30;
     const leaveDeduction = leaves.reduce((s,l) => s + dailyRate*l.workdays*(1-(l.payRate??1)), 0);
     return { ...emp, punches, leaves, totalHours, totalOvertimeHours,
       netSalary: Math.max(0, totalSalary - leaveDeduction), leaveDeduction, punchCount: punches.length };
@@ -388,7 +393,7 @@ function SalaryTab({ summaries, month, positions }) {
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: emp.totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{emp.totalOvertimeHours > 0 ? fmtHours(emp.totalOvertimeHours) : '--'}</td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: emp.leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{emp.leaveDeduction > 0 ? `-${fmtMoney(emp.leaveDeduction)}` : '--'}</td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, color: emp.netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(emp.netSalary)}</td>
-              <td><SalaryReport employee={emp} punches={emp.punches} leaves={emp.leaves} month={month} /></td>
+              <td><SalaryReport employee={{ ...emp, _position: posMap2[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} /></td>
             </tr>
           ))}
         </tbody>
@@ -800,8 +805,9 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
   const emp = employees.find(e => e.id === queryEmpId);
   const punches = allPunches.filter(p => p.uid === queryEmpId);
   const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
+  const empWithPos2 = emp ? { ...emp, _position: posMap[emp.positionId] || null } : null;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
-    ? calcSalaryFromPunches(punches, emp, leaves)
+    ? calcSalaryFromPunches(punches, empWithPos2, leaves)
     : { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
 
   const leaveDeduction = emp?.payType === 'hourly'
