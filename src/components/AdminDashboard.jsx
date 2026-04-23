@@ -388,7 +388,7 @@ function SalaryTab({ summaries, month, positions }) {
               <td style={{ fontWeight: 500 }}>{emp.name}</td>
               <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{emp.positionId ? (posMap[emp.positionId]?.name || '--') : '--'}</td>
               <td><span className={`badge ${emp.payType === 'hourly' ? 'badge-amber' : 'badge-muted'}`}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</span></td>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(emp.monthlySalary||0).toLocaleString()}/mo`}</td>
+              <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(posMap[emp.positionId]?.baseSalary ?? emp.monthlySalary ?? 0).toLocaleString()}/mo`}</td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{emp.totalHours > 0 ? fmtHours(emp.totalHours) : <span style={{ color: 'var(--text-muted)' }}>0h</span>}</td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: emp.totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{emp.totalOvertimeHours > 0 ? fmtHours(emp.totalOvertimeHours) : '--'}</td>
               <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: emp.leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{emp.leaveDeduction > 0 ? `-${fmtMoney(emp.leaveDeduction)}` : '--'}</td>
@@ -625,7 +625,7 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                     </div>
                     {emp.pin && (
                       <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 1, fontFamily: 'var(--mono)' }}>
-                        密碼：<span style={{ color: 'var(--text-primary)', letterSpacing: '0.1em' }}>{emp.pin}</span>
+                        PIN：<span style={{ color: 'var(--text-primary)', letterSpacing: '0.1em', fontFamily: 'var(--mono)' }}>{emp.pin}</span>
                       </div>
                     )}
                   </div>
