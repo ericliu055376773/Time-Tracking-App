@@ -21,6 +21,7 @@ const DEFAULT_RULES = {
   monthlyOTMinutes: 10,   // 月薪加班計算單位（分鐘）
   hourlyOTMinutes: 10,    // 時薪加班計算單位（分鐘）
   salaryRevealDay: 30,    // 薪資明細開放日（每月幾號）
+  punchCutoffMinutes: 30,  // 上班打卡截止（班別開始後幾分鐘鎖定）
 };
 
 let idCounter = Date.now();
@@ -157,6 +158,27 @@ export default function SalaryRuleManager() {
             <span style={muteTxt}>每月</span>
             <span style={whiteVal}>{rules.salaryRevealDay || 30}</span>
             <span style={muteTxt}>號後員工可查看薪資明細</span>
+          </DisplayRow>
+        )}
+      </DeductCard>
+
+      {/* 打卡截止時間設定 */}
+      <DeductCard title="上班打卡截止時間" prefix="⏰" color="var(--red)"
+        isEditing={editing.cutoff} onToggleEdit={() => toggleEdit('cutoff')}>
+        {editing.cutoff ? (
+          <EditRow>
+            <span style={muteTxt}>上班時間過後</span>
+            <NumInput value={rules.punchCutoffMinutes ?? 30} onChange={v => update('punchCutoffMinutes', Math.max(0, v))} width={70} />
+            <span style={muteTxt}>分鐘內未打卡則鎖定（0 = 不鎖定，需管理員補打）</span>
+          </EditRow>
+        ) : (
+          <DisplayRow>
+            <span style={muteTxt}>上班後</span>
+            <span style={whiteVal}>{rules.punchCutoffMinutes ?? 30}</span>
+            <span style={muteTxt}>分鐘內未打卡則鎖定</span>
+            {(rules.punchCutoffMinutes ?? 30) === 0
+              ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不鎖定）</span>
+              : <span style={{ fontSize: 11, color: 'var(--red)' }}>⚠️ 超時需管理員補打，自動失去全勤</span>}
           </DisplayRow>
         )}
       </DeductCard>
