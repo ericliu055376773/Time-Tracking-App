@@ -21,7 +21,6 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
     return { dailyRecords: [], totalHours: 0, totalSalary: 0, totalOvertimeHours: 0, salaryBreakdown: null };
   }
 
-  // 依日期分組
   const byDate = {};
   punches.forEach((p) => {
     const date = p.date || format(p.timestamp?.toDate(), 'yyyy-MM-dd');
@@ -34,7 +33,6 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
   let totalOvertimeMinutes = 0;
   let totalSalary = 0;
 
-  // ── 時薪制 ──────────────────────────────────────────────────
   if (profile.payType === 'hourly') {
     const STANDARD_HOURS = 8;
     const OVERTIME_RATE_1 = 1.34;
@@ -89,9 +87,9 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
     return { dailyRecords, totalHours: totalMinutes / 60, totalOvertimeHours: totalOvertimeMinutes / 60, totalSalary, salaryBreakdown: null };
   }
 
-  // ── 月薪制 ──────────────────────────────────────────────────
-  const monthlySalary = profile.monthlySalary || 0;
-  const mealAllowance = profile.mealAllowance || 0;  // 月餐費總額
+  const pos = profile._position || null;
+  const monthlySalary = pos?.baseSalary ?? profile.monthlySalary ?? 0;
+  const mealAllowance = pos?.mealAllowance ?? profile.mealAllowance ?? 0;
   const FULL_ATTENDANCE_BONUS = 2000;
 
   const dailyBase = monthlySalary / 30;
@@ -110,15 +108,12 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
       const pairs = Math.min(ins.length, outs.length);
       const isClockedIn = ins.length > outs.length;
 
-      // 忘打卡：有上班卡但沒下班卡（且不是目前進行中）
       if (ins.length > outs.length && !isClockedIn) hasMissedPunch = true;
       if (ins.length !== outs.length && !isClockedIn) hasMissedPunch = true;
 
-      // 遲到判斷
       const dayLate = ins.reduce((acc, p) => acc + (p.lateMinutes || 0), 0);
       if (dayLate > 0) hasLate = true;
 
-      // 計算實際工時（供顯示用）
       let dayMinutes = 0;
       for (let i = 0; i < pairs; i++) {
         const diff = differenceInMinutes(outs[i].timestamp.toDate(), ins[i].timestamp.toDate());
@@ -126,7 +121,6 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
       }
       totalMinutes += dayMinutes;
 
-      // 有出勤（有上班卡）才算出勤天數
       if (ins.length > 0) attendedDays++;
 
       const dayBaseSalary = dailyBase + dailyMeal;
@@ -145,25 +139,23 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
       });
     });
 
-  // 全勤判定
   const approvedLeaves = leaves.filter(l => l.status === 'approved');
   const hasLeave = approvedLeaves.length > 0;
   const hasFullAttendance = !hasLate && !hasLeave && !hasMissedPunch;
   const fullAttendancePay = hasFullAttendance ? FULL_ATTENDANCE_BONUS : 0;
 
-  // 薪資明細（供薪資單顯示）
   const salaryBreakdown = {
     attendedDays,
     dailyBase,
     dailyMeal,
-    basePay: Math.round(dailyBase * attendedDays),       // 底薪部分
-    mealPay: Math.round(dailyMeal * attendedDays),        // 餐費部分
-    fullAttendancePay,                                     // 全勤獎金
+    basePay: Math.round(dailyBase * attendedDays),
+    mealPay: Math.round(dailyMeal * attendedDays),
+    fullAttendancePay,
     hasFullAttendance,
     hasLate,
     hasLeave,
     hasMissedPunch,
-    bonus: 0,                                             // 紅利（月底手動填）
+    bonus: 0,
   };
 
   return {
