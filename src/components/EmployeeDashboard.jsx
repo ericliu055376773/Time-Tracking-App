@@ -31,6 +31,7 @@ export default function EmployeeDashboard() {
   const [todayShifts, setTodayShifts] = useState({ shift1: null, shift2: null });
   const [shiftWarning, setShiftWarning] = useState('');
   const [salaryRevealDay, setSalaryRevealDay] = useState(30);
+  const [punchCutoffMinutes, setPunchCutoffMinutes] = useState(30);
   const [confirmPunch, setConfirmPunch] = useState(null); // { type, label, time, lateMin, validation }
 
   useEffect(() => {
@@ -59,8 +60,9 @@ export default function EmployeeDashboard() {
     async function loadSalarySettings() {
       try {
         const snap = await getDoc(doc(db, 'settings', 'salaryRules'));
-        if (snap.exists() && snap.data().salaryRevealDay) {
-          setSalaryRevealDay(snap.data().salaryRevealDay);
+        if (snap.exists()) {
+          if (snap.data().salaryRevealDay) setSalaryRevealDay(snap.data().salaryRevealDay);
+          if (snap.data().punchCutoffMinutes !== undefined) setPunchCutoffMinutes(snap.data().punchCutoffMinutes);
         }
       } catch {}
     }
@@ -155,9 +157,16 @@ export default function EmployeeDashboard() {
 
     if (type === 'in') {
       if (nowMins < startMins - 15) {
-        return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘（${shift.id}班 ${shift.start} 上班）` };
+        return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘（${shift.name || shift.id}班 ${shift.start} 上班）` };
       }
-      if (nowMins > endMins) return { ok: false, msg: `已超過 ${shift.id}班 下班時間（${shift.end}）` };
+      if (nowMins > endMins) return { ok: false, msg: `已超過 ${shift.name || shift.id}班 下班時間（${shift.end}），如需補打請聯繫管理員` };
+      // 方案三：打卡截止時間鎖定
+      const cutoff = punchCutoffMinutes ?? 30;
+      if (cutoff > 0 && nowMins > startMins + cutoff) {
+        const lateMin = nowMins - startMins;
+        return { ok: false, msg: `打卡時間已截止（上班後 ${cutoff} 分鐘鎖定）
+遲到 ${lateMin} 分鐘，請聯繫管理員補打卡，當月失去全勤獎金`, locked: true };
+      }
       const lateMin = Math.max(0, nowMins - startMins);
       return { ok: true, msg: lateMin > 0 ? `⚠️ 遲到 ${lateMin} 分鐘` : '', shiftId: shift.id, lateMinutes: lateMin };
     } else {
@@ -176,7 +185,10 @@ export default function EmployeeDashboard() {
     if (!punchState.currentShift) { setShiftWarning('今日未排班，無法打卡'); return; }
 
     const validation = validatePunchTime(punchState.nextType, punchState.currentShift);
-    if (!validation.ok) { setShiftWarning(validation.msg); return; }
+    if (!validation.ok) {
+      setShiftWarning(validation.msg);
+      return;
+    }
     setShiftWarning('');
 
     // 計算距離上班時間（供 Modal 顯示）
