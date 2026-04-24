@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+
 import { useAuth } from '../contexts/AuthContext';
 import { useNav } from '../contexts/NavContext';
 import { useAdminNav } from '../contexts/AdminNavContext';
@@ -28,9 +29,9 @@ export default function Layout({ children }) {
   const { profile, logout } = useAuth();
   const nav = useNav();
   const adminNav = useAdminNav();
+  const pendingLeaveCount = adminNav?.pendingLeaveCount || 0;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
-
   const isAdmin = profile?.role === 'admin';
 
   useEffect(() => {
@@ -131,6 +132,9 @@ export default function Layout({ children }) {
                         }}>
                         <span style={{ fontSize: 14 }}>{tab.icon}</span>
                         <span style={{ flex: 1 }}>{tab.key}</span>
+                        {tab.key === '請假審核' && pendingLeaveCount > 0 && (
+                          <span style={{ background: 'var(--red)', color: '#fff', borderRadius: 999, fontSize: 10, fontWeight: 700, padding: '1px 6px', minWidth: 18, textAlign: 'center' }}>{pendingLeaveCount}</span>
+                        )}
                         {hasChildren && <span style={{ fontSize: 10 }}>{isParentActive ? '▾' : '▸'}</span>}
                       </button>
                       {/* 子分類 */}
@@ -214,4 +218,3 @@ export default function Layout({ children }) {
     </div>
   );
 }
-
