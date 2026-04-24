@@ -598,8 +598,8 @@ function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRec
       ) : (
         <div className="card" style={{ marginBottom: 14, border: '1px solid var(--border)', textAlign: 'center', padding: '18px 16px' }}>
           <div style={{ fontSize: 20, marginBottom: 8 }}>🔒</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>薪資明細將於每月 {SALARY_REVEAL_DAY} 號開放查看</div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>目前為 {todayDay} 號，還需等待 {SALARY_REVEAL_DAY - todayDay} 天</div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)' }}>薪資明細將於每月 {revealDay} 號開放查看</div>
+          <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>目前為 {todayDay} 號，還需等待 {revealDay - todayDay} 天</div>
         </div>
       )}
 
