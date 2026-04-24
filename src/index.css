@@ -1,22 +1,23 @@
-/* src/index.css */
+ /* src/index.css */
 :root {
-  --bg-base: #07090d;
-  --bg-surface: #0e1117;
-  --bg-elevated: #161b25;
-  --bg-card: #1c2333;
-  --border: #2a3347;
-  --border-bright: #3d4f6e;
-  --amber: #f59e0b;
-  --amber-dim: #d97706;
-  --amber-glow: rgba(245, 158, 11, 0.15);
-  --green: #22c55e;
-  --green-glow: rgba(34, 197, 94, 0.15);
-  --red: #ef4444;
-  --red-glow: rgba(239, 68, 68, 0.15);
-  --blue: #3b82f6;
-  --text-primary: #e2e8f0;
-  --text-secondary: #94a3b8;
-  --text-muted: #475569;
+  /* �賢�銝駁�嚗𡁶蒾摨𨰻���摮𨰜����剝�����脤�暺� */
+  --bg-base:     #ffffff;
+  --bg-surface:  #f6f6f6;
+  --bg-elevated: #f0f0f0;
+  --bg-card:     #ffffff;
+  --border:      #e0e0e0;
+  --border-bright: #c8c8c8;
+  --amber:       #f0a500;
+  --amber-dim:   #c88a00;
+  --amber-glow:  rgba(240,165,0,0.10);
+  --green:       #2f855a;
+  --green-glow:  rgba(47,133,90,0.10);
+  --red:         #e53e3e;
+  --red-glow:    rgba(229,62,62,0.10);
+  --blue:        #2b6cb0;
+  --text-primary:   #111111;
+  --text-secondary: #444444;
+  --text-muted:     #888888;
   --mono: 'IBM Plex Mono', monospace;
   --sans: 'IBM Plex Sans TC', sans-serif;
   --radius: 6px;
@@ -44,7 +45,7 @@ body {
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: var(--bg-surface); }
-::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: #bdbdbd; border-radius: 3px; }
 
 /* Utility */
 .mono { font-family: var(--mono); }
@@ -70,7 +71,7 @@ button:disabled {
 /* Input base */
 input, select, textarea {
   font-family: var(--sans);
-  background: var(--bg-elevated);
+  background: #fafafa;
   border: 1px solid var(--border);
   color: var(--text-primary);
   border-radius: var(--radius);
@@ -81,8 +82,8 @@ input, select, textarea {
   transition: border-color 0.15s ease;
 }
 input:focus, select:focus, textarea:focus {
-  border-color: var(--amber);
-  box-shadow: 0 0 0 3px var(--amber-glow);
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px var(--red-glow);
 }
 input::placeholder { color: var(--text-muted); }
 
@@ -92,6 +93,7 @@ input::placeholder { color: var(--text-muted); }
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 /* Badge */
