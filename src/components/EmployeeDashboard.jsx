@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  collection, addDoc, query, where, orderBy, getDocs,
+  collection, addDoc, deleteDoc, query, where, orderBy, getDocs,
   serverTimestamp, Timestamp, doc, getDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -241,6 +241,16 @@ export default function EmployeeDashboard() {
   const canPunch = networkStatus.allowed && (todayShifts.shift1 || todayShifts.shift2) && punchState.nextType;
 
   // ── 本月統計頁面 ────────────────────────────────────────────
+  // ── 特休頁面 ────────────────────────────────────────────────
+  if (activePage === 'annual') {
+    return <EmpAnnualPage profile={profile} user={user} />;
+  }
+
+  // ── 請假頁面 ────────────────────────────────────────────────
+  if (activePage === 'leave') {
+    return <EmpLeavePage profile={profile} user={user} />;
+  }
+
   if (activePage === 'stats') {
     return <div style={{ background: 'var(--bg-base)', minHeight: '100vh' }}><StatsPage
       profile={profile}
@@ -642,3 +652,272 @@ function StatsPage({ profile, loading, selectedMonth, setSelectedMonth, dailyRec
     </div>
   );
 }
+
+// ── 計算特休天數 ─────────────────────────────────────────────
+function calcAnnualLeaveDays(months) {
+  if (months < 6) return 0;
+  if (months < 12) return 3;
+  if (months < 24) return 7;
+  if (months < 36) return 10;
+  if (months < 60) return 14;
+  if (months < 120) return 15;
+  return Math.min(15 + Math.floor(months / 12) - 10, 30);
+}
+
+// ── 員工特休頁面 ─────────────────────────────────────────────
+function EmpAnnualPage({ profile, user }) {
+  const [usedLeaves, setUsedLeaves] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    if (!user) return;
+    async function load() {
+      try {
+        const snap = await getDocs(query(
+          collection(db, 'leaves'),
+          where('uid', '==', user.uid),
+          where('type', '==', '特休'),
+          where('status', '!=', 'rejected'),
+          orderBy('status'),
+          orderBy('startDate', 'desc')
+        ));
+        setUsedLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch {}
+      setLoading(false);
+    }
+    load();
+  }, [user]);
+
+  const hired = profile?.hiredAt?.toDate ? profile.hiredAt.toDate() : null;
+  const months = hired ? Math.floor((Date.now() - hired.getTime()) / (1000 * 60 * 60 * 24 * 30.44)) : null;
+  const totalDays = months !== null ? calcAnnualLeaveDays(months) : null;
+  const usedDays = usedLeaves.filter(l => l.status === 'approved').reduce((s, l) => s + (l.workdays || 1), 0);
+  const remainDays = totalDays !== null ? Math.max(0, totalDays - usedDays) : null;
+
+  return (
+    <div style={{ padding: '20px 16px', maxWidth: 600, margin: '0 auto', background: 'var(--bg-base)', minHeight: '100vh' }}>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 600 }}>特休</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>{profile?.name}</p>
+      </div>
+
+      {/* 特休概覽 */}
+      {totalDays !== null ? (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
+          {[
+            { label: '今年特休', val: totalDays, color: 'var(--amber)' },
+            { label: '已使用', val: usedDays, color: 'var(--red)' },
+            { label: '剩餘可休', val: remainDays, color: 'var(--green)' },
+          ].map(({ label, val, color }) => (
+            <div key={label} className="card" style={{ padding: '14px', textAlign: 'center' }}>
+              <div style={{ fontSize: 28, fontWeight: 700, fontFamily: 'var(--mono)', color }}>{val}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>{label}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card" style={{ padding: 20, marginBottom: 20, textAlign: 'center', color: 'var(--text-muted)' }}>
+          請至管理員設定到職日以計算特休天數
+        </div>
+      )}
+
+      {/* 已使用特休明細 */}
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>特休使用紀錄</div>
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>
+      ) : usedLeaves.length === 0 ? (
+        <div className="card" style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>尚未請過特休</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {usedLeaves.map(l => (
+            <div key={l.id} className="card" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{l.startDate} {l.endDate && l.endDate !== l.startDate ? `～ ${l.endDate}` : ''}</div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{l.workdays || 1} 天{l.reason ? `・${l.reason}` : ''}</div>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+                background: l.status === 'approved' ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.12)',
+                color: l.status === 'approved' ? 'var(--green)' : 'var(--amber)',
+                border: `1px solid ${l.status === 'approved' ? 'rgba(34,197,94,0.3)' : 'rgba(245,158,11,0.3)'}`,
+              }}>
+                {l.status === 'approved' ? '✓ 通過' : '⏳ 待審核'}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── 員工請假頁面 ─────────────────────────────────────────────
+const LEAVE_TYPES = ['特休', '事假', '病假', '婚假', '喪假', '其他'];
+
+function EmpLeavePage({ profile, user }) {
+  const [leaves, setLeaves] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [showForm, setShowForm] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [form, setForm] = React.useState({ type: '特休', startDate: '', endDate: '', reason: '' });
+  const [formError, setFormError] = React.useState('');
+
+  async function loadLeaves() {
+    if (!user) return;
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'leaves'),
+        where('uid', '==', user.uid),
+        orderBy('createdAt', 'desc')
+      ));
+      setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch {}
+    setLoading(false);
+  }
+
+  React.useEffect(() => { loadLeaves(); }, [user]);
+
+  async function handleSubmit() {
+    setFormError('');
+    if (!form.startDate) return setFormError('請選擇開始日期');
+    if (!form.endDate) return setFormError('請選擇結束日期');
+    if (form.endDate < form.startDate) return setFormError('結束日期不可早於開始日期');
+
+    // 計算工作天數（簡單版：日曆天數）
+    const start = new Date(form.startDate);
+    const end = new Date(form.endDate);
+    const days = Math.round((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    setSubmitting(true);
+    try {
+      await addDoc(collection(db, 'leaves'), {
+        uid: user.uid,
+        userName: profile?.name || '',
+        type: form.type,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        workdays: days,
+        reason: form.reason.trim(),
+        status: 'pending',
+        createdAt: serverTimestamp(),
+      });
+      setForm({ type: '特休', startDate: '', endDate: '', reason: '' });
+      setShowForm(false);
+      await loadLeaves();
+    } catch (err) {
+      setFormError('送出失敗：' + err.message);
+    }
+    setSubmitting(false);
+  }
+
+  const statusLabel = { pending: '⏳ 待審核', approved: '✓ 通過', rejected: '✗ 拒絕' };
+  const statusColor = { pending: 'var(--amber)', approved: 'var(--green)', rejected: 'var(--red)' };
+
+  return (
+    <div style={{ padding: '20px 16px', maxWidth: 600, margin: '0 auto', background: 'var(--bg-base)', minHeight: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+        <div>
+          <h1 style={{ fontSize: 20, fontWeight: 600 }}>請假</h1>
+          <p style={{ color: 'var(--text-muted)', fontSize: 12, marginTop: 2 }}>{profile?.name}</p>
+        </div>
+        <button onClick={() => { setShowForm(!showForm); setFormError(''); }} style={{
+          padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+          background: showForm ? 'var(--bg-elevated)' : 'var(--amber)',
+          color: showForm ? 'var(--text-secondary)' : '#000',
+          border: showForm ? '1px solid var(--border)' : 'none', cursor: 'pointer',
+        }}>
+          {showForm ? '取消' : '＋ 申請請假'}
+        </button>
+      </div>
+
+      {/* 請假申請表單 */}
+      {showForm && (
+        <div className="card" style={{ padding: '20px', marginBottom: 20, border: '1px solid var(--amber)' }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)', marginBottom: 16 }}>申請請假單</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <label style={fldStyle}>
+              <span>假別</span>
+              <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} style={inputStyle}>
+                {LEAVE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <label style={fldStyle}>
+                <span>開始日期</span>
+                <input type="date" value={form.startDate} onChange={e => setForm(f => ({ ...f, startDate: e.target.value, endDate: e.target.value }))} style={inputStyle} />
+              </label>
+              <label style={fldStyle}>
+                <span>結束日期</span>
+                <input type="date" value={form.endDate} min={form.startDate} onChange={e => setForm(f => ({ ...f, endDate: e.target.value }))} style={inputStyle} />
+              </label>
+            </div>
+            {form.startDate && form.endDate && (
+              <div style={{ fontSize: 12, color: 'var(--amber)', padding: '8px 12px', background: 'var(--amber-glow)', borderRadius: 8 }}>
+                共 {Math.round((new Date(form.endDate) - new Date(form.startDate)) / (1000 * 60 * 60 * 24)) + 1} 天
+              </div>
+            )}
+            <label style={fldStyle}>
+              <span>事由（選填）</span>
+              <input value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="請輸入請假事由" style={inputStyle} />
+            </label>
+            {formError && <div style={{ color: 'var(--red)', fontSize: 12 }}>{formError}</div>}
+            <button onClick={handleSubmit} disabled={submitting} style={{
+              padding: '12px', borderRadius: 8, background: 'var(--amber)', color: '#000',
+              fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer',
+            }}>
+              {submitting ? '送出中...' : '送出請假單'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 請假紀錄 */}
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>請假紀錄</div>
+      {loading ? (
+        <div style={{ color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>
+      ) : leaves.length === 0 ? (
+        <div className="card" style={{ padding: 20, textAlign: 'center', color: 'var(--text-muted)' }}>尚無請假紀錄</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {leaves.map(l => (
+            <div key={l.id} className="card" style={{
+              padding: '14px 16px',
+              borderLeft: `3px solid ${statusColor[l.status] || 'var(--border)'}`,
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'var(--bg-elevated)', color: 'var(--text-secondary)' }}>{l.type}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{l.startDate}{l.endDate !== l.startDate ? ` ～ ${l.endDate}` : ''}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                    {l.workdays} 天{l.reason ? `・${l.reason}` : ''}
+                  </div>
+                  {l.rejectReason && (
+                    <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>拒絕原因：{l.rejectReason}</div>
+                  )}
+                </div>
+                <span style={{
+                  fontSize: 11, fontWeight: 700, padding: '4px 10px', borderRadius: 999,
+                  color: statusColor[l.status], border: `1px solid ${statusColor[l.status]}44`,
+                  background: statusColor[l.status] + '11', flexShrink: 0,
+                }}>
+                  {statusLabel[l.status] || l.status}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const fldStyle = {
+  display: 'flex', flexDirection: 'column', gap: 6,
+  fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em',
+};
+const inputStyle = {
+  padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8,
+  fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none',
+};
