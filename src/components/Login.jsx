@@ -52,13 +52,16 @@ export default function Login() {
     if (pin.length !== 10) { setError('PIN 碼必須是 10 位數字'); return; }
     reset(); setLoading(true);
     try {
-      // 用 PIN 查詢員工（同時支援字串和數字）
+      // 用 PIN 查 Firestore，再用 authPassword 登入 Firebase Auth
       let snap = await getDocs(query(collection(db, 'users'), where('pin', '==', pin), where('role', '==', 'employee')));
       if (snap.empty) {
         snap = await getDocs(query(collection(db, 'users'), where('pin', '==', Number(pin)), where('role', '==', 'employee')));
       }
       if (snap.empty) { setError('PIN 碼錯誤，請確認後再試'); setLoading(false); return; }
-      await signInWithEmailAndPassword(auth, snap.docs[0].data().email, pin);
+      const userData = snap.docs[0].data();
+      // 優先用 authPassword，沒有就用 pin（舊帳號相容）
+      const authPwd = userData.authPassword || pin;
+      await signInWithEmailAndPassword(auth, userData.email, authPwd);
     } catch (err) {
       const msgs = { 'auth/invalid-credential': 'PIN 碼錯誤', 'auth/too-many-requests': '嘗試次數過多，請稍後再試' };
       setError(msgs[err.code] || '登入失敗：' + err.message);
@@ -76,12 +79,14 @@ export default function Login() {
       const timestamp = Date.now().toString().slice(-6);
       const generatedEmpId = `EMP${timestamp}`;
       const email = `${generatedEmpId.toLowerCase()}@internal.timeclock`;
-      const cred = await createUserWithEmailAndPassword(auth, email, pin);
+      const authPassword = `timeclock_${generatedEmpId.toLowerCase()}`;
+      const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
       await setDoc(doc(db, 'users', cred.user.uid), {
         name: name.trim(),
         empId: generatedEmpId,
         email,
         pin,
+        authPassword,
         role: 'employee',
         payType: 'hourly',
         hourlyRate: 0,
