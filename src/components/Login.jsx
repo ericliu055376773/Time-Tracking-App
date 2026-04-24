@@ -52,9 +52,11 @@ export default function Login() {
     if (pin.length !== 10) { setError('PIN 碼必須是 10 位數字'); return; }
     reset(); setLoading(true);
     try {
-      // 用 PIN 查詢所有員工，找到對應的 email 登入
-      const q = query(collection(db, 'users'), where('pin', '==', pin), where('role', '==', 'employee'));
-      const snap = await getDocs(q);
+      // 用 PIN 查詢員工（同時支援字串和數字）
+      let snap = await getDocs(query(collection(db, 'users'), where('pin', '==', pin), where('role', '==', 'employee')));
+      if (snap.empty) {
+        snap = await getDocs(query(collection(db, 'users'), where('pin', '==', Number(pin)), where('role', '==', 'employee')));
+      }
       if (snap.empty) { setError('PIN 碼錯誤，請確認後再試'); setLoading(false); return; }
       await signInWithEmailAndPassword(auth, snap.docs[0].data().email, pin);
     } catch (err) {
@@ -79,10 +81,12 @@ export default function Login() {
         name: name.trim(),
         empId: generatedEmpId,
         email,
+        pin,
         role: 'employee',
-        payType,
-        hourlyRate: Number(hourlyRate),
-        monthlySalary: 30000,
+        payType: 'hourly',
+        hourlyRate: 0,
+        monthlySalary: 0,
+        mealAllowance: 0,
         overtimeEnabled: false,
         createdAt: serverTimestamp(),
       });
