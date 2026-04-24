@@ -28,7 +28,7 @@ export default function AdminDashboard() {
   const [allLeaves, setAllLeaves] = useState([]);
   const [selectedMonth, setSelectedMonth] = useState(format(new Date(), 'yyyy-MM'));
   const [loading, setLoading] = useState(false);
-  const { activeTab, setActiveTab } = useAdminNav();
+  const { activeTab, setActiveTab, setPendingLeaveCount } = useAdminNav();
   const [queryEmpId, setQueryEmpId] = useState('');
   const [editingEmp, setEditingEmp] = useState(null);
   const [editForm, setEditForm] = useState({});
@@ -84,6 +84,7 @@ export default function AdminDashboard() {
 
   const totalPayroll = salarySummaries.reduce((s, e) => s + e.netSalary, 0);
   const pendingLeaves = allLeaves.filter(l => l.status === 'pending').length;
+  React.useEffect(() => { setPendingLeaveCount(pendingLeaves); }, [pendingLeaves]);
 
   async function handleAddEmployee() {
     setAddError('');
@@ -211,12 +212,48 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: pendingLeaves > 0 ? 16 : 28 }}>
         <KpiCard label="員工人數" value={employees.length} unit="人" />
         <KpiCard label="本月打卡次數" value={allPunches.length} unit="次" color="var(--blue)" />
         <KpiCard label="待審假單" value={pendingLeaves} unit="筆" color={pendingLeaves > 0 ? 'var(--red)' : 'var(--text-muted)'} />
         <KpiCard label="本月應付薪資" value={fmtMoney(totalPayroll)} color="var(--amber)" highlight />
       </div>
+
+      {/* 通知卡片 */}
+      {pendingLeaves > 0 && (
+        <div style={{ marginBottom: 28, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 2 }}>🔔 待處理通知</div>
+          <button
+            onClick={() => setActiveTab('請假審核')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14, width: '100%',
+              padding: '14px 18px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.3)',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.12)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(239,68,68,0.06)'}
+          >
+            <div style={{
+              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+              background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+            }}>📋</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>
+                有 {pendingLeaves} 筆請假單待審核
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                點擊前往請假審核 →
+              </div>
+            </div>
+            <div style={{
+              background: 'var(--red)', color: '#fff', borderRadius: 999,
+              fontSize: 13, fontWeight: 700, padding: '3px 12px', flexShrink: 0,
+            }}>{pendingLeaves}</div>
+          </button>
+        </div>
+      )}
 
 
 
