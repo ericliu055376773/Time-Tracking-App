@@ -100,9 +100,13 @@ export default function AdminDashboard() {
       const email = addForm.role === 'employee'
         ? `${slug}@internal.timeclock`
         : addForm.email.trim();
-      const cred = await createUserWithEmailAndPassword(auth, email, addForm.pin);
+      // Firebase Auth 密碼用固定格式，登入驗證靠 Firestore pin
+      const authPassword = `timeclock_${slug}`;
+      const cred = await createUserWithEmailAndPassword(auth, email, authPassword);
       await setDoc(doc(db, 'users', cred.user.uid), {
         name: addForm.name.trim(), email,
+        pin: addForm.pin,
+        authPassword,
         role: addForm.role, payType: addForm.payType,
         positionId: addForm.positionId || '',
         hourlyRate: Number(addForm.hourlyRate), monthlySalary: Number(addForm.monthlySalary), mealAllowance: Number(addForm.mealAllowance||0),
