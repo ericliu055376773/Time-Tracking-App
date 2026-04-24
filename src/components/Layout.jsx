@@ -205,7 +205,7 @@ export default function Layout({ children }) {
         )}
 
         {/* 主內容 */}
-        <main style={{ flex: 1, overflow: 'auto', width: '100%', minWidth: 0, boxSizing: 'border-box' }}>
+        <main style={{ flex: 1, overflow: 'auto', width: '100%', minWidth: 0, boxSizing: 'border-box', background: 'var(--bg-base)' }}>
           {children}
         </main>
       </div>
