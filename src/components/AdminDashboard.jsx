@@ -195,7 +195,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div style={{ padding: '32px 40px' }} className="fade-in">
+    <div style={{ padding: '20px 24px', minWidth: 0, overflow: 'hidden' }} className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 600 }}>管理後台</h1>
@@ -419,7 +419,7 @@ function SalaryTab({ summaries, month, positions }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
     <div className="table-wrapper">
-      <table>
+      <table style={{ minWidth: 700 }}>
         <thead>
           <tr><th>姓名</th><th>職位</th><th>薪資類型</th><th>費率</th><th>工時</th><th>加班</th><th>請假扣薪</th><th>實發薪資</th><th>薪資單</th></tr>
         </thead>
