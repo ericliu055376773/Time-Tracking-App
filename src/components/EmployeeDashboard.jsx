@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  collection, addDoc, deleteDoc, query, where, orderBy, getDocs,
+  collection, addDoc, deleteDoc, query, where, orderBy, getDocs, onSnapshot,
   serverTimestamp, Timestamp, doc, getDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -376,7 +376,7 @@ export default function EmployeeDashboard() {
             <button onClick={handlePunch} disabled={punchLoading || networkStatus.checking || !canPunch} style={{
               width: '100%', padding: 13, borderRadius: 10, fontSize: 15, fontWeight: 700,
               background: !canPunch ? 'var(--bg-elevated)' : punchState.nextType === 'out' ? 'var(--red-glow)' : 'var(--amber)',
-              color: !canPunch ? 'var(--text-muted)' : punchState.nextType === 'out' ? 'var(--red)' : '#000',
+              color: !canPunch ? 'var(--text-muted)' : punchState.nextType === 'out' ? 'var(--red)' : '#ffffff',
               border: punchState.nextType === 'out' && canPunch ? '1px solid rgba(239,68,68,0.4)' : 'none',
               cursor: canPunch ? 'pointer' : 'not-allowed',
             }}>
@@ -456,7 +456,7 @@ export default function EmployeeDashboard() {
                     style={{
                       flex: 2, padding: 12, borderRadius: 10, fontSize: 14, fontWeight: 700,
                       background: confirmPunch.type === 'in' ? 'var(--amber)' : 'var(--red-glow)',
-                      color: confirmPunch.type === 'in' ? '#000' : 'var(--red)',
+                      color: confirmPunch.type === 'in' ? '#ffffff' : 'var(--red)',
                       border: confirmPunch.type === 'out' ? '1px solid rgba(239,68,68,0.4)' : 'none',
                       cursor: 'pointer',
                     }}>
@@ -671,21 +671,15 @@ function EmpAnnualPage({ profile, user }) {
 
   React.useEffect(() => {
     if (!user) return;
-    async function load() {
-      try {
-        const snap = await getDocs(query(
-          collection(db, 'leaves'),
-          where('uid', '==', user.uid),
-          where('type', '==', '特休'),
-          where('status', '!=', 'rejected'),
-          orderBy('status'),
-          orderBy('startDate', 'desc')
-        ));
-        setUsedLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      } catch {}
-      setLoading(false);
-    }
-    load();
+    const unsub = onSnapshot(
+      query(collection(db, 'leaves'), where('uid', '==', user.uid), where('type', '==', '特休'), orderBy('createdAt', 'desc')),
+      snap => {
+        setUsedLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter(l => l.status !== 'rejected'));
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+    return () => unsub();
   }, [user]);
 
   const hired = profile?.hiredAt?.toDate ? profile.hiredAt.toDate() : null;
@@ -762,20 +756,21 @@ function EmpLeavePage({ profile, user }) {
   const [form, setForm] = React.useState({ type: '特休', startDate: '', endDate: '', reason: '' });
   const [formError, setFormError] = React.useState('');
 
-  async function loadLeaves() {
+  React.useEffect(() => {
     if (!user) return;
-    try {
-      const snap = await getDocs(query(
-        collection(db, 'leaves'),
-        where('uid', '==', user.uid),
-        orderBy('createdAt', 'desc')
-      ));
-      setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    } catch {}
-    setLoading(false);
-  }
+    // 即時監聽，後台審核後自動更新
+    const unsub = onSnapshot(
+      query(collection(db, 'leaves'), where('uid', '==', user.uid), orderBy('createdAt', 'desc')),
+      snap => {
+        setLeaves(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+    return () => unsub();
+  }, [user]);
 
-  React.useEffect(() => { loadLeaves(); }, [user]);
+  async function loadLeaves() { /* 已改用 onSnapshot，保留供 handleSubmit 呼叫 */ }
 
   async function handleSubmit() {
     setFormError('');
@@ -921,4 +916,3 @@ const inputStyle = {
   padding: '9px 12px', border: '1px solid var(--border)', borderRadius: 8,
   fontSize: 13, background: 'var(--bg-base)', color: 'var(--text-primary)', outline: 'none',
 };
-
