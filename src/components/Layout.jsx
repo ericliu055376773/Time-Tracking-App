@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../firebase';
 
 import { useAuth } from '../contexts/AuthContext';
 import { useNav } from '../contexts/NavContext';
