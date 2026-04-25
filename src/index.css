@@ -1,4 +1,4 @@
- /* src/index.css */
+/* src/index.css */
 :root {
   /* �賢�銝駁�嚗𡁶蒾摨𨰻���摮𨰜����剝�����脤�暺� */
   --bg-base:     #ffffff;
@@ -7,9 +7,9 @@
   --bg-card:     #ffffff;
   --border:      #e0e0e0;
   --border-bright: #c8c8c8;
-  --amber:       #f0a500;
-  --amber-dim:   #c88a00;
-  --amber-glow:  rgba(240,165,0,0.10);
+  --amber:       #222222;
+  --amber-dim:   #444444;
+  --amber-glow:  rgba(34,34,34,0.08);
   --green:       #2f855a;
   --green-glow:  rgba(47,133,90,0.10);
   --red:         #e53e3e;
