@@ -19,7 +19,7 @@ export default function Login() {
   const [logoClickCount, setLogoClickCount] = useState(0);
   const [appName, setAppName] = useState('TIMECLOCK');
 
-  React.useEffect(() => {
+  useEffect(() => {
     getDoc(doc(db, 'settings', 'general')).then(snap => {
       if (snap.exists() && snap.data().appName) setAppName(snap.data().appName);
     }).catch(() => {});
