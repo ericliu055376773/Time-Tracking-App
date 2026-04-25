@@ -353,7 +353,7 @@ export default function EmployeeDashboard() {
                     <div style={{
                       width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13,
                       background: done ? 'var(--green)' : current ? 'var(--amber)' : 'var(--bg-elevated)',
-                      color: done || current ? '#000' : 'var(--text-muted)',
+                      color: done || current ? '#ffffff' : 'var(--text-muted)',
                       border: current ? '2px solid var(--amber)' : '1px solid var(--border)',
                     }}>{done ? '✓' : idx + 1}</div>
                     <div style={{ fontSize: 9, color: done ? 'var(--green)' : current ? 'var(--amber)' : 'var(--text-muted)' }}>{label}</div>
@@ -818,7 +818,7 @@ function EmpLeavePage({ profile, user }) {
         <button onClick={() => { setShowForm(!showForm); setFormError(''); }} style={{
           padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700,
           background: showForm ? 'var(--bg-elevated)' : 'var(--amber)',
-          color: showForm ? 'var(--text-secondary)' : '#000',
+          color: showForm ? 'var(--text-secondary)' : '#fff',
           border: showForm ? '1px solid var(--border)' : 'none', cursor: 'pointer',
         }}>
           {showForm ? '取消' : '＋ 申請請假'}
@@ -857,7 +857,7 @@ function EmpLeavePage({ profile, user }) {
             </label>
             {formError && <div style={{ color: 'var(--red)', fontSize: 12 }}>{formError}</div>}
             <button onClick={handleSubmit} disabled={submitting} style={{
-              padding: '12px', borderRadius: 8, background: 'var(--amber)', color: '#000',
+              padding: '12px', borderRadius: 8, background: 'var(--amber)', color: '#ffffff',
               fontWeight: 700, fontSize: 14, border: 'none', cursor: 'pointer',
             }}>
               {submitting ? '送出中...' : '送出請假單'}
