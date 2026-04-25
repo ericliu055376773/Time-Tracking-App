@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, setDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, collection, query, where, getDocs, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../firebase';
 
 const ADMIN_EMAIL = 'admin@test.com';
@@ -17,6 +17,13 @@ export default function Login() {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   const [logoClickCount, setLogoClickCount] = useState(0);
+  const [appName, setAppName] = useState('TIMECLOCK');
+
+  React.useEffect(() => {
+    getDoc(doc(db, 'settings', 'general')).then(snap => {
+      if (snap.exists() && snap.data().appName) setAppName(snap.data().appName);
+    }).catch(() => {});
+  }, []);
 
   function reset() { setError(''); setSuccess(''); }
 
@@ -124,7 +131,7 @@ export default function Login() {
             </svg>
           </div>
           <h1 style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 500, color: 'var(--text-primary)', letterSpacing: '0.08em' }}>
-            TIMECLOCK
+            {appName}
           </h1>
           <p style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--mono)', letterSpacing: '0.06em', marginTop: 4 }}>
             打卡薪資管理系統
