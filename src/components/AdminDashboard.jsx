@@ -273,6 +273,8 @@ export default function AdminDashboard() {
   <PositionManager />
 ) : activeTab === '班別設定' ? (
   <ShiftManager />
+      ) : activeTab === '系統設定' ? (
+        <SystemSettings />
       ) : activeTab === '月薪算法' ? (
         <SalaryRuleManager />
       ) : activeTab === '排班管理' ? (
@@ -962,6 +964,62 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+// ── 系統設定 ─────────────────────────────────────────────────
+function SystemSettings() {
+  const [appName, setAppNameState] = React.useState('TIMECLOCK');
+  const [saved, setSaved] = React.useState(false);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    getDoc(doc(db, 'settings', 'general')).then(snap => {
+      if (snap.exists() && snap.data().appName) setAppNameState(snap.data().appName);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  async function handleSave() {
+    try {
+      await setDoc(doc(db, 'settings', 'general'), { appName: appName.trim() || 'TIMECLOCK' }, { merge: true });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) { alert('儲存失敗：' + err.message); }
+  }
+
+  if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>載入中...</div>;
+
+  return (
+    <div style={{ maxWidth: 500 }}>
+      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 20 }}>⚙️ 系統設定</div>
+
+      <div className="card" style={{ padding: '20px 24px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>系統名稱</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
+          顯示在登入頁和側邊導航欄頂部
+        </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <input
+            value={appName}
+            onChange={e => setAppNameState(e.target.value)}
+            placeholder="TIMECLOCK"
+            maxLength={20}
+            style={{
+              flex: 1, padding: '10px 14px',
+              border: '1px solid var(--border)', borderRadius: 8,
+              fontSize: 15, fontWeight: 700, letterSpacing: '0.08em',
+              background: 'var(--bg-surface)', color: 'var(--text-primary)', outline: 'none',
+            }}
+          />
+          <button onClick={handleSave} style={{
+            padding: '10px 20px', background: 'var(--amber)', color: '#fff',
+            borderRadius: 8, fontWeight: 700, fontSize: 13, border: 'none', cursor: 'pointer',
+          }}>儲存</button>
+        </div>
+        {saved && <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 8 }}>✓ 已儲存，重新整理後生效</div>}
+      </div>
     </div>
   );
 }
