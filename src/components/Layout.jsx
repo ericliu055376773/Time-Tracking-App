@@ -33,7 +33,14 @@ export default function Layout({ children }) {
   const pendingLeaveCount = adminNav?.pendingLeaveCount || 0;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [appName, setAppName] = useState('TIMECLOCK');
   const isAdmin = profile?.role === 'admin';
+
+  useEffect(() => {
+    getDoc(doc(db, 'settings', 'general')).then(snap => {
+      if (snap.exists() && snap.data().appName) setAppName(snap.data().appName);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768);
