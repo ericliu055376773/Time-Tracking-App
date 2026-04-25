@@ -152,7 +152,7 @@ export default function Login() {
                 style={{
                   padding: '8px 0', borderRadius: 6, fontSize: 13, fontWeight: 500,
                   background: mode === key ? 'var(--amber)' : 'transparent',
-                  color: mode === key ? '#000' : 'var(--text-muted)',
+                  color: mode === key ? '#ffffff' : 'var(--text-muted)',
                 }}>
                 {label}
               </button>
@@ -221,6 +221,6 @@ const errStyle = {
 };
 const btnStyle = {
   padding: '12px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-  background: 'var(--amber)', color: '#000', letterSpacing: '0.05em',
+  background: 'var(--amber)', color: '#ffffff', letterSpacing: '0.05em',
   cursor: 'pointer', border: 'none',
 };
