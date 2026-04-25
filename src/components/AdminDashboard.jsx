@@ -257,45 +257,32 @@ export default function AdminDashboard() {
 
 
 
-      <div style={{ width: '100%', maxWidth: '100%' }}>
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>載入中...</div>
-      ) : activeTab === '薪資結算' ? (
-        <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />
-      ) : activeTab === '打卡紀錄' ? (
-        <RecordsTab punches={allPunches} employees={employees} />
-      ) : activeTab === '員工查詢' ? (
-        <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} />
-      ) : activeTab === '請假審核' ? (
-        <LeaveManager isAdmin={true} />
-) : activeTab === 'WiFi 設定' ? (
-  <WifiSettings />
-) : activeTab === '職位薪資' ? (
-  <PositionManager />
-) : activeTab === '班別設定' ? (
-  <ShiftManager />
-      ) : activeTab === '系統設定' ? (
-        <SystemSettings />
-      ) : activeTab === '月薪算法' ? (
-        <SalaryRuleManager />
-      ) : activeTab === '排班管理' ? (
-        <ScheduleManager />
-      ) : activeTab === '特休天數' ? (
-        <AnnualLeaveManager subTab="特休天數" />
-      ) : activeTab === '未休補償' ? (
-        <AnnualLeaveManager subTab="未休補償" />
-      ) : activeTab === '員工管理' || activeTab === '員工薪資' ? (
-        <EmployeesTab
-          employees={employees}
-          editingEmp={editingEmp} editForm={editForm}
-          onEdit={emp => { setEditingEmp(emp.id); setEditForm({ ...emp }); }}
-          onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))}
-          onSave={handleUpdateEmployee}
-          onCancel={() => setEditingEmp(null)}
-          onDelete={handleDeleteEmployee}
-          positions={positions}
-        />
-      ) : null}
+      <div style={{ width: '100%' }}>
+        {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
+        {!loading && activeTab === '薪資結算' && <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />}
+        {!loading && activeTab === '打卡紀錄' && <RecordsTab punches={allPunches} employees={employees} />}
+        {!loading && activeTab === '員工查詢' && <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} />}
+        {!loading && activeTab === '請假審核' && <LeaveManager isAdmin={true} />}
+        {!loading && activeTab === 'WiFi 設定' && <WifiSettings />}
+        {!loading && activeTab === '職位薪資' && <PositionManager />}
+        {!loading && activeTab === '班別設定' && <ShiftManager />}
+        {!loading && activeTab === '系統設定' && <SystemSettings />}
+        {!loading && activeTab === '月薪算法' && <SalaryRuleManager />}
+        {!loading && activeTab === '排班管理' && <ScheduleManager />}
+        {!loading && activeTab === '特休天數' && <AnnualLeaveManager subTab="特休天數" />}
+        {!loading && activeTab === '未休補償' && <AnnualLeaveManager subTab="未休補償" />}
+        {!loading && (activeTab === '員工管理' || activeTab === '員工薪資') && (
+          <EmployeesTab
+            employees={employees}
+            editingEmp={editingEmp} editForm={editForm}
+            onEdit={emp => { setEditingEmp(emp.id); setEditForm({ ...emp }); }}
+            onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))}
+            onSave={handleUpdateEmployee}
+            onCancel={() => setEditingEmp(null)}
+            onDelete={handleDeleteEmployee}
+            positions={positions}
+          />
+        )}
       </div>
 
       {showMakePunch && (
