@@ -201,7 +201,7 @@ export default function LeaveManager({ isAdmin = false }) {
                 fontWeight: 500,
                 background:
                   filterStatus === s ? 'var(--amber)' : 'var(--bg-elevated)',
-                color: filterStatus === s ? '#000' : 'var(--text-secondary)',
+                color: filterStatus === s ? '#fff' : 'var(--text-secondary)',
                 border: filterStatus === s ? 'none' : '1px solid var(--border)',
               }}
             >
@@ -214,7 +214,7 @@ export default function LeaveManager({ isAdmin = false }) {
               style={{
                 padding: '8px 16px',
                 background: 'var(--amber)',
-                color: '#000',
+                color: '#fff',
                 borderRadius: 8,
                 fontSize: 13,
                 fontWeight: 600,
@@ -342,7 +342,7 @@ export default function LeaveManager({ isAdmin = false }) {
                 style={{
                   padding: '9px 18px',
                   background: 'var(--amber)',
-                  color: '#000',
+                  color: '#fff',
                   borderRadius: 8,
                   fontSize: 13,
                   fontWeight: 700,
