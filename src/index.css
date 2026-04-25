@@ -90,6 +90,7 @@ input::placeholder { color: var(--text-muted); }
 /* Card */
 .card {
   background: var(--bg-card);
+  min-width: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   padding: 24px;
@@ -117,6 +118,7 @@ input::placeholder { color: var(--text-muted); }
   overflow-x: auto;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
+  max-width: 100%;
 }
 table {
   width: 100%;
