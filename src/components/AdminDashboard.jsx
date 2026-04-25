@@ -195,7 +195,7 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div style={{ padding: '20px 24px', minWidth: 0, overflow: 'hidden' }} className="fade-in">
+    <div style={{ padding: '20px 24px', minWidth: 0, maxWidth: '100%', boxSizing: 'border-box' }} className="fade-in">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 600 }}>管理後台</h1>
@@ -257,6 +257,7 @@ export default function AdminDashboard() {
 
 
 
+      <div style={{ width: '100%', maxWidth: '100%' }}>
       {loading ? (
         <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontFamily: 'var(--mono)', fontSize: 12 }}>載入中...</div>
       ) : activeTab === '薪資結算' ? (
@@ -295,6 +296,7 @@ export default function AdminDashboard() {
           positions={positions}
         />
       ) : null}
+      </div>
 
       {showMakePunch && (
         <Modal title="🕐 補打卡" onClose={() => setShowMakePunch(false)}>
