@@ -294,7 +294,7 @@ export default function AdminDashboard() {
           onDelete={handleDeleteEmployee}
           positions={positions}
         />
-      )}
+      ) : null}
 
       {showMakePunch && (
         <Modal title="🕐 補打卡" onClose={() => setShowMakePunch(false)}>
