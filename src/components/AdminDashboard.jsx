@@ -283,7 +283,7 @@ export default function AdminDashboard() {
         <AnnualLeaveManager subTab="特休天數" />
       ) : activeTab === '未休補償' ? (
         <AnnualLeaveManager subTab="未休補償" />
-      ) : (
+      ) : activeTab === '員工管理' || activeTab === '員工薪資' ? (
         <EmployeesTab
           employees={employees}
           editingEmp={editingEmp} editForm={editForm}
