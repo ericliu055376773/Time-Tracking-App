@@ -206,7 +206,7 @@ export default function AdminDashboard() {
           <button onClick={() => { setMakePunchForm({ uid: '', date: '', time: '', type: 'in', shiftId: '', note: '' }); setMakePunchError(''); setShowMakePunch(true); }} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
             🕐 補打卡
           </button>
-          <button onClick={() => setShowAddModal(true)} style={{ padding: '9px 16px', background: 'var(--amber)', color: '#000', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+          <button onClick={() => setShowAddModal(true)} style={{ padding: '9px 16px', background: 'var(--amber)', color: '#ffffff', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
             + 新增員工
           </button>
         </div>
@@ -336,7 +336,7 @@ export default function AdminDashboard() {
                 {makePunchError}
               </div>
             )}
-            <button onClick={handleMakePunch} disabled={makePunchLoading} style={{ padding: 12, background: 'var(--amber)', color: '#000', borderRadius: 8, fontWeight: 700, fontSize: 14 }}>
+            <button onClick={handleMakePunch} disabled={makePunchLoading} style={{ padding: 12, background: 'var(--amber)', color: '#ffffff', borderRadius: 8, fontWeight: 700, fontSize: 14 }}>
               {makePunchLoading ? '補打中...' : '確認補打卡'}
             </button>
           </div>
@@ -405,7 +405,7 @@ export default function AdminDashboard() {
                 {addError}
               </div>
             )}
-            <button onClick={handleAddEmployee} disabled={addLoading} style={{ padding: 12, background: 'var(--amber)', color: '#000', borderRadius: 8, fontWeight: 700, fontSize: 14 }}>
+            <button onClick={handleAddEmployee} disabled={addLoading} style={{ padding: 12, background: 'var(--amber)', color: '#ffffff', borderRadius: 8, fontWeight: 700, fontSize: 14 }}>
               {addLoading ? '建立中...' : '建立帳號'}
             </button>
           </div>
@@ -520,14 +520,14 @@ function RecordsTab({ punches, employees }) {
           <button onClick={() => setFilterUid('')} style={{
             padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: filterUid === '' ? 700 : 400,
             background: filterUid === '' ? 'var(--amber)' : 'var(--bg-elevated)',
-            color: filterUid === '' ? '#000' : 'var(--text-secondary)',
+            color: filterUid === '' ? '#fff' : 'var(--text-secondary)',
             border: filterUid === '' ? 'none' : '1px solid var(--border)', cursor: 'pointer',
           }}>全部員工</button>
           {employees.map(e => (
             <button key={e.id} onClick={() => setFilterUid(e.id)} style={{
               padding: '6px 14px', borderRadius: 7, fontSize: 12, fontWeight: filterUid === e.id ? 700 : 400,
               background: filterUid === e.id ? 'var(--amber)' : 'var(--bg-elevated)',
-              color: filterUid === e.id ? '#000' : 'var(--text-secondary)',
+              color: filterUid === e.id ? '#fff' : 'var(--text-secondary)',
               border: filterUid === e.id ? 'none' : '1px solid var(--border)', cursor: 'pointer',
             }}>{e.name}</button>
           ))}
@@ -647,7 +647,7 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                 </label>
                 {/* 儲存/取消 */}
                 <div style={{ display: 'flex', gap: 8 }}>
-                  <button onClick={onSave} style={{ padding: '9px 16px', background: 'var(--green)', color: '#000', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>儲存</button>
+                  <button onClick={onSave} style={{ padding: '9px 16px', background: 'var(--green)', color: '#ffffff', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>儲存</button>
                   <button onClick={onCancel} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13 }}>取消</button>
                 </div>
               </div>
@@ -778,7 +778,7 @@ function WifiSettings() {
         <div style={{ display: 'flex', gap: 10 }}>
           <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="WiFi 名稱（例如：辦公室）" style={{ flex: 1, fontSize: 13 }} />
           <button onClick={addNetwork} disabled={!newName.trim() || !currentInfo} style={{
-            padding: '0 18px', background: 'var(--amber)', color: '#000',
+            padding: '0 18px', background: 'var(--amber)', color: '#ffffff',
             border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
           }}>新增</button>
         </div>
@@ -872,7 +872,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
               <button key={e.id} onClick={() => setQueryEmpId(e.id)} style={{
                 padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: active ? 600 : 400,
                 background: active ? 'var(--amber)' : 'var(--bg-elevated)',
-                color: active ? '#000' : 'var(--text-secondary)',
+                color: active ? '#fff' : 'var(--text-secondary)',
                 border: active ? 'none' : '1px solid var(--border)', cursor: 'pointer',
               }}>
                 {e.name}
