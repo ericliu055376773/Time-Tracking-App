@@ -94,7 +94,7 @@ export default function PositionManager() {
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>目前共 {positions.length} 個職位</div>
         </div>
         <button onClick={openAdd} style={{
-          padding: '9px 18px', background: 'var(--amber)', color: '#000',
+          padding: '9px 18px', background: 'var(--amber)', color: '#fff',
           border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
         }}>+ 新增職位</button>
       </div>
@@ -167,7 +167,7 @@ export default function PositionManager() {
               {formError && <div style={{ background: 'var(--red-glow)', border: '1px solid rgba(239,68,68,0.3)', padding: '10px 14px', borderRadius: 6, color: 'var(--red)', fontSize: 13 }}>{formError}</div>}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: '11px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>取消</button>
-                <button onClick={handleSave} style={{ flex: 2, padding: '11px', background: 'var(--amber)', color: '#000', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                <button onClick={handleSave} style={{ flex: 2, padding: '11px', background: 'var(--amber)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                   {editingId ? '儲存變更' : '建立職位'}
                 </button>
               </div>
