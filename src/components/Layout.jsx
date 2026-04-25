@@ -11,6 +11,7 @@ const ADMIN_TABS = [
   { key: '請假審核',  icon: '📋' },
   { key: '員工管理',  icon: '👥' },
   { key: 'WiFi 設定', icon: '📡' },
+  { key: '系統設定',  icon: '⚙️' },
   { key: '月薪算法',  icon: '📐' },
   { key: '職位薪資',  icon: '🏷️' },
   { key: '班別設定',  icon: '⏰' },
@@ -59,7 +60,7 @@ export default function Layout({ children }) {
             color: 'var(--text-primary)', fontSize: 18, lineHeight: 1,
           }}>☰</button>
           <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.08em' }}>
-            TIMECLOCK
+            {appName}
           </div>
           {isAdmin && adminNav && (
             <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 4 }}>
@@ -91,7 +92,7 @@ export default function Layout({ children }) {
             {/* Logo */}
             <div style={{ marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.1em' }}>TIMECLOCK</div>
+                <div style={{ fontFamily: 'var(--mono)', fontSize: 13, fontWeight: 700, color: 'var(--amber)', letterSpacing: '0.1em' }}>{appName}</div>
                 <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>v1.0</div>
               </div>
               {isMobile && (
