@@ -1,515 +1,681 @@
-// src/components/SalaryReport.jsx
-// 薪資單：管理員可為任一員工產生指定月份薪資單，並列印/匯出
-import React, { useState, useRef } from 'react';
-import {
-  calcSalaryFromPunches,
-  fmtMoney,
-  fmtHours,
-} from '../hooks/useSalaryCalc';
-import { format } from 'date-fns';
-import { zhTW } from 'date-fns/locale';
+// src/components/SalaryRuleManager.jsx
+import React, { useState, useEffect } from 'react';
+import { doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
+import { db } from '../firebase';
 
-export default function SalaryReport({
-  employee,
-  punches,
-  leaves = [],
-  month,
-}) {
-  const printRef = useRef(null);
-  const [showReport, setShowReport] = useState(false);
+const DEFAULT_RULES = {
+  // 月薪制扣款
+  laborInsurance: 0,
+  healthInsurance: 0,
+  lateGracePeriod: 0,
+  lateDeductionPerMinute: 0,
+  personalLeaveIncludeFullAtt: true,
+  sickLeaveIncludeFullAtt: true,
+  // 時薪制扣款
+  hourlyLaborInsurance: 0,
+  hourlyHealthInsurance: 0,
+  hourlyLateGracePeriod: 0,
+  hourlyLateDeductionPerMinute: 0,
+  // 通用
+  customItems: [],
+  monthlyOTMinutes: 10,   // 月薪加班計算單位（分鐘）
+  hourlyOTMinutes: 10,    // 時薪加班計算單位（分鐘）
+  salaryRevealDay: 30,    // 薪資明細開放日（每月幾號）
+  punchCutoffMinutes: 30,  // 上班打卡截止（班別開始後幾分鐘鎖定）
+};
 
-  if (!employee || !month) return null;
+let idCounter = Date.now();
+function newId() { return `item_${idCounter++}`; }
 
-  // 注入職位資料供薪資計算使用
-  const empForCalc = employee._position
-    ? { ...employee, monthlySalary: employee._position.baseSalary, mealAllowance: employee._position.mealAllowance }
-    : employee;
-  const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } =
-    calcSalaryFromPunches(punches, empForCalc, leaves);
+// 取得當月日曆總天數（不含假日判斷，純粹幾月有幾天）
+function getTotalDays(year, month) {
+  return new Date(year, month, 0).getDate(); // e.g. 4月=30, 5月=31
+}
 
-  // 計算請假扣薪（時薪制才扣，月薪制已在計算中處理）
-  const approvedLeaves = leaves.filter(
-    (l) => l.status === 'approved' && l.uid === employee.id
-  );
-  const leaveDeductions = employee.payType === 'hourly'
-    ? approvedLeaves.reduce((sum, l) => {
-        const dailyRate = (employee.hourlyRate || 0) * 8;
-        return sum + dailyRate * l.workdays * (1 - (l.payRate ?? 1));
-      }, 0)
-    : 0;
+// 從行政院行事曆API取得當月實際上班天數（扣週末＋國定假日）
+async function fetchWorkingDays(year, month) {
+  try {
+    const pad = n => String(n).padStart(2, '0');
+    const startDate = `${year}${pad(month)}01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const endDate = `${year}${pad(month)}${pad(lastDay)}`;
+    // 行政院人事行政總處行事曆 API
+    // isHoliday === '否' 代表正常上班日
+    const url = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${startDate},date:lte:${endDate}&limit=50`;
+    const res = await fetch(url);
+    const json = await res.json();
+    const records = json?.result?.records || [];
+    if (records.length === 0) throw new Error('no data');
+    // 計算 isHoliday === '否' 的天數（實際上班日）
+    const workDays = records.filter(r => r.isHoliday === '否').length;
+    return workDays;
+  } catch {
+    // API 失敗時，備用：只扣週六日
+    let workDays = 0;
+    const last = new Date(year, month, 0).getDate();
+    for (let d = 1; d <= last; d++) {
+      const dow = new Date(year, month - 1, d).getDay();
+      if (dow !== 0 && dow !== 6) workDays++;
+    }
+    return workDays;
+  }
+}
 
-  const netSalary = Math.max(0, totalSalary - leaveDeductions);
-  const workdays = dailyRecords.filter(
-    (r) => r.hours > 0 || r.isClockedIn
-  ).length;
+export default function SalaryRuleManager() {
+  const [rules, setRules] = useState(null);
+  const [positions, setPositions] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [activeSection, setActiveSection] = useState('monthly'); // 'monthly' | 'hourly'
+  const [editing, setEditing] = useState({});
+  const [workingDays, setWorkingDays] = useState(null);
+  const [totalDays, setTotalDays] = useState(null);
+  const [workingDaysLoading, setWorkingDaysLoading] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
 
-  function handlePrint() {
-    const content = printRef.current?.innerHTML;
-    if (!content) return;
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html lang="zh-TW"><head>
-      <meta charset="UTF-8">
-      <title>薪資單 ${employee.name} ${month}</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
-      <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans+TC:wght@300;400;500;600&display=swap" rel="stylesheet">
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'IBM Plex Sans TC', sans-serif; background: #fff; color: #111; padding: 40px; }
-        .mono { font-family: 'IBM Plex Mono', monospace; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; font-size: 11px; font-weight: 600; color: #666; border-bottom: 1px solid #ddd; padding: 8px 12px; letter-spacing: 0.06em; text-transform: uppercase; }
-        td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
-        @media print {
-          body { padding: 20px; }
-          button { display: none !important; }
-        }
-      </style>
-    </head><body>${content}</body></html>`);
-    w.document.close();
-    setTimeout(() => {
-      w.print();
-    }, 500);
+  useEffect(() => {
+    async function load() {
+      const [snap, posSnap, empSnap] = await Promise.all([
+        getDoc(doc(db, 'settings', 'salaryRules')),
+        getDoc(doc(db, 'settings', 'positions')),
+        getDocs(collection(db, 'users')),
+      ]);
+      setRules(snap.exists() ? { ...DEFAULT_RULES, ...snap.data() } : { ...DEFAULT_RULES });
+      setPositions(posSnap.exists() ? (posSnap.data().list || []) : []);
+    }
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (!selectedMonth) return;
+    const [y, m] = selectedMonth.split('-').map(Number);
+    setWorkingDaysLoading(true);
+    setTotalDays(getTotalDays(y, m));
+    fetchWorkingDays(y, m).then(d => {
+      setWorkingDays(d);
+      setWorkingDaysLoading(false);
+    });
+  }, [selectedMonth]);
+
+  async function handleSave() {
+    setSaving(true); setSaved(false);
+    try {
+      await setDoc(doc(db, 'settings', 'salaryRules'), rules);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) { alert('儲存失敗：' + err.message); }
+    setSaving(false);
   }
 
-  if (!showReport) {
-    return (
-      <button
-        onClick={() => setShowReport(true)}
-        style={{
-          padding: '6px 14px',
-          background: 'var(--bg-elevated)',
-          color: 'var(--text-secondary)',
-          border: '1px solid var(--border)',
-          borderRadius: 6,
-          fontSize: 12,
-          fontWeight: 500,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-        }}
-      >
-        <PrintIcon /> 薪資單
-      </button>
-    );
-  }
+  function update(key, val) { setRules(r => ({ ...r, [key]: val })); }
+  function toggleEdit(key) { setEditing(e => ({ ...e, [key]: !e[key] })); }
+
+  if (!rules) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>;
+
+  const [sy, sm] = selectedMonth.split('-').map(Number);
+  const wd = workingDays || 30;  // 工作天數（扣假日）
+  const td = totalDays || 30;   // 當月日曆總天數
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.75)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-        backdropFilter: 'blur(6px)',
-      }}
-      onClick={(e) => e.target === e.currentTarget && setShowReport(false)}
-    >
-      <div
-        style={{
-          background: 'var(--bg-card)',
-          border: '1px solid var(--border)',
-          borderRadius: 12,
-          width: '100%',
-          maxWidth: 680,
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          margin: '60px 20px 20px',
-          marginTop: 'max(60px, env(safe-area-inset-top, 20px))',
-        }}
-        className="fade-in"
-      >
-        {/* Modal Controls */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            padding: '16px 24px',
-            borderBottom: '1px solid var(--border)',
-          }}
-        >
-          <span style={{ fontWeight: 600, fontSize: 15 }}>薪資單預覽</span>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={handlePrint}
-              style={{
-                padding: '7px 16px',
-                background: 'var(--amber)',
-                color: '#000',
-                borderRadius: 7,
-                fontSize: 13,
-                fontWeight: 700,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}
-            >
-              <PrintIcon /> 列印 / 儲存 PDF
-            </button>
-            <button
-              onClick={() => setShowReport(false)}
-              style={{
-                padding: '7px 12px',
-                background: 'var(--bg-elevated)',
-                color: 'var(--text-secondary)',
-                border: '1px solid var(--border)',
-                borderRadius: 7,
-                fontSize: 13,
-              }}
-            >
-              ✕
-            </button>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+      {/* 頂部工具列 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+        {/* 分類切換 */}
+        <div style={{ display: 'flex', gap: 3, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4 }}>
+          {[{ key: 'monthly', label: '月薪制扣款設定' }, { key: 'hourly', label: '時薪制扣款設定' }, { key: 'monthlyOT', label: '月薪薪資補償' }, { key: 'hourlyOT', label: '時薪薪資補償' }].map(tab => (
+            <button key={tab.key} onClick={() => setActiveSection(tab.key)} style={{
+              padding: '7px 16px', borderRadius: 6, fontSize: 13, fontWeight: activeSection === tab.key ? 700 : 400,
+              background: activeSection === tab.key ? 'var(--amber)' : 'transparent',
+              color: activeSection === tab.key ? '#fff' : 'var(--text-secondary)',
+              border: 'none', cursor: 'pointer',
+            }}>{tab.label}</button>
+          ))}
         </div>
-
-        {/* Report content */}
-        <div ref={printRef} style={{ padding: 32 }}>
-          {/* Slip header */}
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'flex-start',
-              marginBottom: 28,
-              paddingBottom: 20,
-              borderBottom: '2px solid var(--border)',
-            }}
-          >
-            <div>
-              <div
-                style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  letterSpacing: '0.1em',
-                  marginBottom: 6,
-                }}
-              >
-                SALARY STATEMENT
-              </div>
-              <div style={{ fontSize: 22, fontWeight: 600, marginBottom: 4 }}>
-                {employee.name}
-              </div>
-              <div
-                style={{
-                  fontSize: 12,
-                  color: 'var(--text-muted)',
-                  fontFamily: 'var(--mono)',
-                }}
-              >
-                {employee.email}
-              </div>
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div
-                style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 22,
-                  fontWeight: 300,
-                  color: 'var(--amber)',
-                }}
-              >
-                {month}
-              </div>
-              <div
-                style={{
-                  fontSize: 11,
-                  color: 'var(--text-muted)',
-                  fontFamily: 'var(--mono)',
-                  marginTop: 4,
-                }}
-              >
-                {format(new Date(), 'yyyy/MM/dd', { locale: zhTW })} 製發
-              </div>
-            </div>
-          </div>
-
-          {/* Summary row */}
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, 1fr)',
-              gap: 12,
-              marginBottom: 24,
-            }}
-          >
-            {[
-              { label: '出勤天數', value: `${workdays} 天` },
-              { label: '工作時數', value: fmtHours(totalHours) },
-              { label: '加班時數', value: fmtHours(totalOvertimeHours) },
-              {
-                label: '請假天數',
-                value: `${approvedLeaves.reduce(
-                  (s, l) => s + l.workdays,
-                  0
-                )} 天`,
-              },
-            ].map((item) => (
-              <div
-                key={item.label}
-                style={{
-                  background: 'var(--bg-elevated)',
-                  border: '1px solid var(--border)',
-                  borderRadius: 8,
-                  padding: '12px 14px',
-                }}
-              >
-                <div
-                  style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: 'var(--text-muted)',
-                    letterSpacing: '0.06em',
-                    marginBottom: 6,
-                  }}
-                >
-                  {item.label}
-                </div>
-                <div
-                  style={{
-                    fontFamily: 'var(--mono)',
-                    fontSize: 16,
-                    fontWeight: 500,
-                  }}
-                >
-                  {item.value}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Daily breakdown */}
-          <div style={{ marginBottom: 24 }}>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                color: 'var(--text-muted)',
-                marginBottom: 10,
-              }}
-            >
-              每日明細
-            </div>
-            <table>
-              <thead>
-                <tr>
-                  <th>日期</th>
-                  <th>上班</th>
-                  <th>下班</th>
-                  <th>工時</th>
-                  <th>加班</th>
-                  <th style={{ textAlign: 'right' }}>薪資</th>
-                </tr>
-              </thead>
-              <tbody>
-                {dailyRecords.map((r) => (
-                  <tr key={r.date}>
-                    <td className="mono" style={{ fontSize: 12 }}>
-                      {r.date}
-                    </td>
-                    <td
-                      className="mono"
-                      style={{ fontSize: 12, color: 'var(--green)' }}
-                    >
-                      {r.inTime || '--'}
-                    </td>
-                    <td
-                      className="mono"
-                      style={{ fontSize: 12, color: 'var(--red)' }}
-                    >
-                      {r.outTime || '--'}
-                    </td>
-                    <td className="mono" style={{ fontSize: 12 }}>
-                      {r.hours > 0 ? fmtHours(r.hours) : '--'}
-                    </td>
-                    <td
-                      className="mono"
-                      style={{
-                        fontSize: 12,
-                        color:
-                          r.overtimeHours > 0
-                            ? 'var(--amber)'
-                            : 'var(--text-muted)',
-                      }}
-                    >
-                      {r.overtimeHours > 0 ? fmtHours(r.overtimeHours) : '--'}
-                    </td>
-                    <td
-                      className="mono"
-                      style={{ fontSize: 12, textAlign: 'right' }}
-                    >
-                      {r.salary > 0 ? fmtMoney(r.salary) : '--'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Salary calculation */}
-          <div
-            style={{
-              border: '1px solid var(--border)',
-              borderRadius: 8,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                background: 'var(--bg-elevated)',
-                padding: '10px 16px',
-                fontSize: 11,
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                color: 'var(--text-muted)',
-              }}
-            >
-              薪資結算
-            </div>
-            <div style={{ padding: '16px' }}>
-              {employee.payType === 'monthly' && salaryBreakdown ? (
-                // ── 月薪制明細 ──────────────────────────────
-                <>
-                  {[
-                    { label: '底薪', sub: `$${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
-                    { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
-                    { label: `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`, sub: salaryBreakdown.hasFullAttendance ? '達成全勤條件' : `未達標：${[salaryBreakdown.hasLate?'有遲到':'', salaryBreakdown.hasLeave?'有請假':'', salaryBreakdown.hasMissedPunch?'有忘打卡':''].filter(Boolean).join('、')}`, amount: salaryBreakdown.fullAttendancePay, isDeduction: false, dim: !salaryBreakdown.hasFullAttendance },
-                    { label: '紅利', sub: '月底另行計算', amount: 0, isDeduction: false, dim: true },
-                  ].map((item, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)', opacity: item.dim && item.amount === 0 ? 0.45 : 1 }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>{item.sub}</div>
-                      </div>
-                      <div style={{ fontFamily: 'var(--mono)', fontSize: 14, color: item.dim && item.amount === 0 ? 'var(--text-muted)' : 'var(--text-primary)' }}>
-                        {item.amount === 0 && item.dim ? '—' : fmtMoney(item.amount)}
-                      </div>
-                    </div>
-                  ))}
-                </>
-              ) : (
-                // ── 時薪制明細 ──────────────────────────────
-                <>
-                  {[
-                    { label: '時薪', sub: `$${employee.hourlyRate}/hr × ${totalHours.toFixed(1)}h`, amount: totalSalary, isDeduction: false },
-                    ...(leaveDeductions > 0 ? [{ label: '請假扣薪', sub: `${approvedLeaves.length} 筆假單`, amount: -leaveDeductions, isDeduction: true }] : []),
-                  ].map((item, i) => (
-                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-                      <div>
-                        <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
-                        <div style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--mono)', marginTop: 2 }}>{item.sub}</div>
-                      </div>
-                      <div style={{ fontFamily: 'var(--mono)', fontSize: 14, color: item.isDeduction ? 'var(--red)' : 'var(--text-primary)' }}>
-                        {item.isDeduction ? '-' : ''}{fmtMoney(Math.abs(item.amount))}
-                      </div>
-                    </div>
-                  ))}
-                </>
-              )}
-              {/* 假的 item.value 用於保持原有架構，不影響後面的 net total */}
-              {false && [{label:'',value:'',amount:0}].map((item, i) => (
-                <div
-                  key={i}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '8px 0',
-                    borderBottom: '1px solid var(--border)',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>
-                      {item.label}
-                    </div>
-                    <div
-                      style={{
-                        fontSize: 11,
-                        color: 'var(--text-muted)',
-                        fontFamily: 'var(--mono)',
-                        marginTop: 2,
-                      }}
-                    >
-                      {item.value}
-                    </div>
-                  </div>
-                  <div
-                    style={{
-                      fontFamily: 'var(--mono)',
-                      fontSize: 14,
-                      color: item.isDeduction
-                        ? 'var(--red)'
-                        : 'var(--text-primary)',
-                    }}
-                  >
-                    {item.isDeduction ? '-' : ''}
-                    {fmtMoney(Math.abs(item.amount))}
-                  </div>
-                </div>
-              ))}
-
-              {/* Net total */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '14px 0 4px',
-                  marginTop: 6,
-                }}
-              >
-                <div style={{ fontSize: 15, fontWeight: 700 }}>實發薪資</div>
-                <div
-                  style={{
-                    fontFamily: 'var(--mono)',
-                    fontSize: 24,
-                    fontWeight: 600,
-                    color: 'var(--amber)',
-                  }}
-                >
-                  {fmtMoney(netSalary)}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div
-            style={{
-              marginTop: 24,
-              paddingTop: 16,
-              borderTop: '1px solid var(--border)',
-              display: 'flex',
-              justifyContent: 'space-between',
-              fontSize: 11,
-              color: 'var(--text-muted)',
-              fontFamily: 'var(--mono)',
-            }}
-          >
-            <span>此薪資單由系統自動計算</span>
-            <span>TimeClock Salary System</span>
-          </div>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          {saved && <span style={{ fontSize: 13, color: 'var(--green)' }}>✓ 已儲存</span>}
+          <button onClick={handleSave} disabled={saving} style={{
+            padding: '8px 20px', background: 'var(--amber)', color: '#ffffff',
+            borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', border: 'none',
+          }}>{saving ? '儲存中...' : '💾 儲存設定'}</button>
         </div>
       </div>
+
+      {/* 薪資明細開放日設定（永遠顯示，不受 Tab 影響） */}
+      <DeductCard title="薪資明細開放日" prefix="📅" color="var(--amber)"
+        isEditing={editing.revealDay} onToggleEdit={() => toggleEdit('revealDay')}>
+        {editing.revealDay ? (
+          <EditRow>
+            <span style={muteTxt}>每月</span>
+            <NumInput value={rules.salaryRevealDay || 30} onChange={v => update('salaryRevealDay', Math.min(31, Math.max(1, v)))} width={70} />
+            <span style={muteTxt}>號（含）之後員工可查看薪資明細與預估實領薪資</span>
+          </EditRow>
+        ) : (
+          <DisplayRow>
+            <span style={muteTxt}>每月</span>
+            <span style={whiteVal}>{rules.salaryRevealDay || 30}</span>
+            <span style={muteTxt}>號後員工可查看薪資明細</span>
+          </DisplayRow>
+        )}
+      </DeductCard>
+
+      {/* 打卡截止時間設定 */}
+      <DeductCard title="上班打卡截止時間" prefix="⏰" color="var(--red)"
+        isEditing={editing.cutoff} onToggleEdit={() => toggleEdit('cutoff')}>
+        {editing.cutoff ? (
+          <EditRow>
+            <span style={muteTxt}>上班時間過後</span>
+            <NumInput value={rules.punchCutoffMinutes ?? 30} onChange={v => update('punchCutoffMinutes', Math.max(0, v))} width={70} />
+            <span style={muteTxt}>分鐘內未打卡則鎖定（0 = 不鎖定，需管理員補打）</span>
+          </EditRow>
+        ) : (
+          <DisplayRow>
+            <span style={muteTxt}>上班後</span>
+            <span style={whiteVal}>{rules.punchCutoffMinutes ?? 30}</span>
+            <span style={muteTxt}>分鐘內未打卡則鎖定</span>
+            {(rules.punchCutoffMinutes ?? 30) === 0
+              ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不鎖定）</span>
+              : <span style={{ fontSize: 11, color: 'var(--red)' }}>⚠️ 超時需管理員補打，自動失去全勤</span>}
+          </DisplayRow>
+        )}
+      </DeductCard>
+
+      {/* ════ 月薪制扣款設定 ════ */}
+      {activeSection === 'monthly' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* 月份選擇（影響假扣款計算） */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>計算月份：</span>
+            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ fontSize: 13, background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
+            <span style={{ fontSize: 12, color: workingDaysLoading ? 'var(--amber)' : 'var(--green)', fontFamily: 'var(--mono)' }}>
+              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天`}
+            </span>
+          </div>
+
+          {/* 1. 勞保扣款 */}
+          <DeductCard
+            title="勞保扣款"
+            prefix="－"
+            color="var(--red)"
+            isEditing={editing.labor}
+            onToggleEdit={() => toggleEdit('labor')}
+          >
+            {editing.labor ? (
+              <EditRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <NumInput value={rules.laborInsurance} onChange={v => update('laborInsurance', v)} />
+                <span style={muteTxt}>元</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <span style={whiteVal}>{rules.laborInsurance.toLocaleString()}</span>
+                <span style={muteTxt}>元</span>
+                <EqResult color="var(--red)">-${rules.laborInsurance.toLocaleString()}</EqResult>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 2. 健保扣款 */}
+          <DeductCard
+            title="健保扣款"
+            prefix="－"
+            color="var(--red)"
+            isEditing={editing.health}
+            onToggleEdit={() => toggleEdit('health')}
+          >
+            {editing.health ? (
+              <EditRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <NumInput value={rules.healthInsurance} onChange={v => update('healthInsurance', v)} />
+                <span style={muteTxt}>元</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <span style={whiteVal}>{rules.healthInsurance.toLocaleString()}</span>
+                <span style={muteTxt}>元</span>
+                <EqResult color="var(--red)">-${rules.healthInsurance.toLocaleString()}</EqResult>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 3. 事假扣款 */}
+          <DeductCard
+            title="事假扣款"
+            prefix="－"
+            color="var(--red)"
+            isEditing={editing.personal}
+            onToggleEdit={() => toggleEdit('personal')}
+            subtitle="每請 1 天事假"
+          >
+            {editing.personal ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                  扣款公式（每1天）：<br />
+                  <span style={{ color: 'var(--red)' }}>（底薪 ÷ {td}天 × 1）＋（餐費 ÷ {td}天 × 1）</span>
+                  <br />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={!!rules.personalLeaveIncludeFullAtt}
+                      onChange={e => update('personalLeaveIncludeFullAtt', e.target.checked)}
+                      style={{ width: 'auto', accentColor: 'var(--red)' }} />
+                    <span>請事假當月失去全勤獎金</span>
+                  </label>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  ※ 底薪與餐費依各職位設定各自計算
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+                  <span style={{ color: 'var(--red)', fontWeight: 600 }}>（底薪 ÷ {td} × 1）＋（餐費 ÷ {td} × 1）</span>
+                </div>
+                {positions.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    {positions.map(pos => {
+                      const base = (pos.baseSalary || 0) / td;
+                      const meal = (pos.mealAllowance || 0) / td;
+                      return (
+                        <div key={pos.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 10px', background: 'var(--bg-base)', borderRadius: 6 }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{pos.name}</span>
+                          <span style={{ fontFamily: 'var(--mono)', color: 'var(--red)', fontWeight: 600 }}>
+                            -${Math.round(base + meal).toLocaleString()} / 天
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ color: rules.personalLeaveIncludeFullAtt ? 'var(--red)' : 'var(--text-muted)' }}>
+                    {rules.personalLeaveIncludeFullAtt ? '⚠️ 請假當月失去全勤' : '✓ 不影響全勤'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </DeductCard>
+
+          {/* 4. 病假扣款 */}
+          <DeductCard
+            title="病假扣款"
+            prefix="－"
+            color="var(--amber)"
+            isEditing={editing.sick}
+            onToggleEdit={() => toggleEdit('sick')}
+            subtitle="每請 1 天病假（半薪）"
+          >
+            {editing.sick ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.7 }}>
+                  扣款公式（每1天）：<br />
+                  <span style={{ color: 'var(--amber)' }}>（底薪 ÷ {td}天 × 0.5）＋（餐費 ÷ {td}天 × 1）</span>
+                  <br />
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, cursor: 'pointer', fontSize: 13 }}>
+                    <input type="checkbox" checked={!!rules.sickLeaveIncludeFullAtt}
+                      onChange={e => update('sickLeaveIncludeFullAtt', e.target.checked)}
+                      style={{ width: 'auto', accentColor: 'var(--amber)' }} />
+                    <span>請病假當月失去全勤獎金</span>
+                  </label>
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  ※ 底薪依各職位設定各自計算；病假底薪扣半薪、餐費全扣
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+                  <span style={{ color: 'var(--amber)', fontWeight: 600 }}>（底薪 ÷ {td} × 0.5）＋（餐費 ÷ {td} × 1）</span>
+                </div>
+                {positions.length > 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
+                    {positions.map(pos => {
+                      const base = (pos.baseSalary || 0) / td * 0.5;
+                      const meal = (pos.mealAllowance || 0) / td;
+                      return (
+                        <div key={pos.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '4px 10px', background: 'var(--bg-base)', borderRadius: 6 }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{pos.name}</span>
+                          <span style={{ fontFamily: 'var(--mono)', color: 'var(--amber)', fontWeight: 600 }}>
+                            -${Math.round(base + meal).toLocaleString()} / 天
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                  <span style={{ color: rules.sickLeaveIncludeFullAtt ? 'var(--amber)' : 'var(--text-muted)' }}>
+                    {rules.sickLeaveIncludeFullAtt ? '⚠️ 請假當月失去全勤' : '✓ 不影響全勤'}
+                  </span>
+                </div>
+              </div>
+            )}
+          </DeductCard>
+
+          {/* 5. 遲到扣款（月薪） */}
+          <DeductCard
+            title="遲到扣款"
+            prefix="－"
+            color="var(--red)"
+            isEditing={editing.late}
+            onToggleEdit={() => toggleEdit('late')}
+          >
+            {editing.late ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <EditRow>
+                  <span style={muteTxt}>寬限</span>
+                  <NumInput value={rules.lateGracePeriod} onChange={v => update('lateGracePeriod', v)} width={60} />
+                  <span style={muteTxt}>分鐘以內不扣（0 = 無寬限）</span>
+                </EditRow>
+                <EditRow>
+                  <span style={muteTxt}>超過寬限後，每分鐘扣</span>
+                  <NumInput value={rules.lateDeductionPerMinute} onChange={v => update('lateDeductionPerMinute', v)} width={70} />
+                  <span style={muteTxt}>元（0 = 不扣）</span>
+                </EditRow>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <DisplayRow>
+                  <span style={muteTxt}>寬限</span>
+                  <span style={whiteVal}>{rules.lateGracePeriod}</span>
+                  <span style={muteTxt}>分鐘以內視為準時</span>
+                  {rules.lateGracePeriod === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（無寬限）</span>}
+                </DisplayRow>
+                <DisplayRow>
+                  <span style={muteTxt}>每分鐘扣</span>
+                  <span style={{ ...whiteVal, color: rules.lateDeductionPerMinute > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{rules.lateDeductionPerMinute}</span>
+                  <span style={muteTxt}>元</span>
+                  {rules.lateDeductionPerMinute === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不扣款）</span>}
+                </DisplayRow>
+              </div>
+            )}
+          </DeductCard>
+
+        </div>
+      )}
+
+      {/* ════ 時薪制扣款設定 ════ */}
+      {activeSection === 'hourly' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* 勞保 */}
+          <DeductCard title="勞保扣款" prefix="－" color="var(--red)" isEditing={editing.hLabor} onToggleEdit={() => toggleEdit('hLabor')}>
+            {editing.hLabor ? (
+              <EditRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <NumInput value={rules.hourlyLaborInsurance} onChange={v => update('hourlyLaborInsurance', v)} />
+                <span style={muteTxt}>元</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <span style={whiteVal}>{(rules.hourlyLaborInsurance||0).toLocaleString()}</span>
+                <span style={muteTxt}>元</span>
+                <EqResult color="var(--red)">-${(rules.hourlyLaborInsurance||0).toLocaleString()}</EqResult>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 健保 */}
+          <DeductCard title="健保扣款" prefix="－" color="var(--red)" isEditing={editing.hHealth} onToggleEdit={() => toggleEdit('hHealth')}>
+            {editing.hHealth ? (
+              <EditRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <NumInput value={rules.hourlyHealthInsurance} onChange={v => update('hourlyHealthInsurance', v)} />
+                <span style={muteTxt}>元</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每月固定扣</span>
+                <span style={whiteVal}>{(rules.hourlyHealthInsurance||0).toLocaleString()}</span>
+                <span style={muteTxt}>元</span>
+                <EqResult color="var(--red)">-${(rules.hourlyHealthInsurance||0).toLocaleString()}</EqResult>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 遲到扣款（時薪） */}
+          <DeductCard title="遲到扣款" prefix="－" color="var(--red)" isEditing={editing.hLate} onToggleEdit={() => toggleEdit('hLate')}>
+            {editing.hLate ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <EditRow>
+                  <span style={muteTxt}>寬限</span>
+                  <NumInput value={rules.hourlyLateGracePeriod||0} onChange={v => update('hourlyLateGracePeriod', v)} width={60} />
+                  <span style={muteTxt}>分鐘以內不扣（0 = 無寬限）</span>
+                </EditRow>
+                <EditRow>
+                  <span style={muteTxt}>超過寬限後，每分鐘扣</span>
+                  <NumInput value={rules.hourlyLateDeductionPerMinute||0} onChange={v => update('hourlyLateDeductionPerMinute', v)} width={70} />
+                  <span style={muteTxt}>元（0 = 不扣）</span>
+                </EditRow>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <DisplayRow>
+                  <span style={muteTxt}>寬限</span>
+                  <span style={whiteVal}>{rules.hourlyLateGracePeriod||0}</span>
+                  <span style={muteTxt}>分鐘以內視為準時</span>
+                  {!rules.hourlyLateGracePeriod && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（無寬限）</span>}
+                </DisplayRow>
+                <DisplayRow>
+                  <span style={muteTxt}>每分鐘扣</span>
+                  <span style={{ ...whiteVal, color: (rules.hourlyLateDeductionPerMinute||0) > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{rules.hourlyLateDeductionPerMinute||0}</span>
+                  <span style={muteTxt}>元</span>
+                  {!(rules.hourlyLateDeductionPerMinute) && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不扣款）</span>}
+                </DisplayRow>
+              </div>
+            )}
+          </DeductCard>
+
+          <div className="card" style={{ padding: '16px 20px', opacity: 0.6 }}>
+            <div style={{ fontSize: 13, color: 'var(--text-muted)', fontStyle: 'italic' }}>
+              ※ 時薪制員工無事假/病假扣款計算（依實際出勤時數計薪）
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* ════ 月薪薪資補償 ════ */}
+      {activeSection === 'monthlyOT' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* 月份選擇 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', background: 'var(--bg-elevated)', borderRadius: 10, border: '1px solid var(--border)' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>計算月份：</span>
+            <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}
+              style={{ fontSize: 13, background: 'transparent', border: 'none', color: 'var(--text-primary)', outline: 'none' }} />
+            <span style={{ fontSize: 12, color: workingDaysLoading ? 'var(--amber)' : 'var(--green)', fontFamily: 'var(--mono)' }}>
+              {workingDaysLoading ? '同步行政院行事曆中...' : `📅 本月總天數：${td} 天`}
+            </span>
+          </div>
+
+          {/* 說明標題 */}
+          <div className="card" style={{ padding: '14px 20px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.25)' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--amber)', marginBottom: 6 }}>📌 8小時以上加班費計算方式</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+              時薪基準 ＝ 底薪 ÷ {td} 天（當月總天數）÷ 8 小時<br />
+              1 小時加班費 ＝ 時薪基準 × 1.34<br />
+              {rules.monthlyOTMinutes} 分鐘加班費 ＝ 時薪基準 × 1.34 ÷ 60 × {rules.monthlyOTMinutes}
+            </div>
+          </div>
+
+          {/* 加班分鐘設定 */}
+          <DeductCard title="加班計算單位" prefix="+" color="var(--amber)"
+            isEditing={editing.monthlyOTMin} onToggleEdit={() => toggleEdit('monthlyOTMin')}>
+            {editing.monthlyOTMin ? (
+              <EditRow>
+                <span style={muteTxt}>每次加班以</span>
+                <NumInput value={rules.monthlyOTMinutes} onChange={v => update('monthlyOTMinutes', Math.max(1, v))} width={70} />
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每次加班以</span>
+                <span style={whiteVal}>{rules.monthlyOTMinutes}</span>
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 各職位加班費計算 */}
+          {positions.length === 0 ? (
+            <div className="card" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              請先至「職位管理」設定職位資料
+            </div>
+          ) : (
+            positions.map(pos => {
+              const baseSalary = pos.baseSalary || 0;
+              const hourlyBase = baseSalary / td / 8;
+              const ot1h = hourlyBase * 1.34;
+              const otMin = ot1h / 60 * rules.monthlyOTMinutes;
+              return (
+                <div key={pos.id} className="card" style={{ padding: '18px 20px', border: '1px solid var(--border)' }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ padding: '2px 10px', borderRadius: 999, background: 'rgba(245,158,11,0.12)', color: 'var(--amber)', fontSize: 12 }}>{pos.name}</span>
+                    <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>底薪 ${baseSalary.toLocaleString()}</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {/* 時薪基準 */}
+                    <OTRow label="時薪基準" formula={`$${baseSalary.toLocaleString()} ÷ ${td}天 ÷ 8h`} result={`$${hourlyBase.toFixed(1)} / h`} color="var(--text-secondary)" />
+                    {/* 1小時加班費 */}
+                    <OTRow label="1 小時加班費" formula={`時薪 × 1.34`} result={`$${Math.round(ot1h).toLocaleString()} / h`} color="var(--green)" />
+                    {/* N分鐘加班費 */}
+                    <OTRow label={`${rules.monthlyOTMinutes} 分鐘加班費`} formula={`時薪 × 1.34 ÷ 60 × ${rules.monthlyOTMinutes}`} result={`$${Math.round(otMin).toLocaleString()} / ${rules.monthlyOTMinutes}分`} color="var(--amber)" />
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ════ 時薪薪資補償 ════ */}
+      {activeSection === 'hourlyOT' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+          {/* 說明標題 */}
+          <div className="card" style={{ padding: '14px 20px', background: 'rgba(96,165,250,0.06)', border: '1px solid rgba(96,165,250,0.25)' }}>
+            <div style={{ fontWeight: 700, fontSize: 14, color: '#60a5fa', marginBottom: 6 }}>📌 8小時以上加班費計算方式</div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.8 }}>
+              1 小時加班費 ＝ 個人時薪 × 1.34<br />
+              {rules.hourlyOTMinutes} 分鐘加班費 ＝ 個人時薪 ÷ 60 × {rules.hourlyOTMinutes}<br />
+              <span style={{color:'var(--text-muted)',fontSize:11}}>（時薪制直接用個人時薪，不需除以天數）</span>
+            </div>
+          </div>
+
+          {/* 加班分鐘設定 */}
+          <DeductCard title="加班計算單位" prefix="+" color="#60a5fa"
+            isEditing={editing.hourlyOTMin} onToggleEdit={() => toggleEdit('hourlyOTMin')}>
+            {editing.hourlyOTMin ? (
+              <EditRow>
+                <span style={muteTxt}>每次加班以</span>
+                <NumInput value={rules.hourlyOTMinutes} onChange={v => update('hourlyOTMinutes', Math.max(1, v))} width={70} />
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </EditRow>
+            ) : (
+              <DisplayRow>
+                <span style={muteTxt}>每次加班以</span>
+                <span style={whiteVal}>{rules.hourlyOTMinutes}</span>
+                <span style={muteTxt}>分鐘為計算單位</span>
+              </DisplayRow>
+            )}
+          </DeductCard>
+
+          {/* 各時薪員工加班費 */}
+          {positions.length === 0 ? (
+            <div className="card" style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
+              請先至「員工管理」設定時薪制員工
+            </div>
+          ) : (
+            // 這裡用 positions 裡有 hourlyRate 的職位（或直接用員工資料）
+            <div className="card" style={{ padding: '16px 20px' }}>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 12 }}>
+                時薪制員工加班費依各自時薪計算，請至「員工查詢」查看個別員工
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <OTRow label="1 小時加班費" formula="個人時薪 × 1.34" result="依各員工時薪" color="var(--green)" />
+                <OTRow label={`${rules.hourlyOTMinutes} 分鐘加班費`} formula={`個人時薪 ÷ 60 × ${rules.hourlyOTMinutes}`} result="依各員工時薪" color="#60a5fa" />
+              </div>
+            </div>
+          )}
+
+        </div>
+      )}
+
     </div>
   );
 }
 
-const PrintIcon = () => (
-  <svg
-    width="14"
-    height="14"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-  >
-    <polyline points="6 9 6 2 18 2 18 9" />
-    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
-    <rect x="6" y="14" width="12" height="8" />
-  </svg>
-);
+// ── 扣款卡片元件 ──────────────────────────────────────────────
+function DeductCard({ title, prefix, color, isEditing, onToggleEdit, subtitle, children }) {
+  return (
+    <div className="card" style={{
+      padding: '16px 20px',
+      border: isEditing ? `1px solid ${color}` : '1px solid var(--border)',
+      transition: 'border 0.2s',
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 12 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontWeight: 700, fontSize: 15, color }}>{prefix}</span>
+            <span style={{ fontWeight: 700, fontSize: 15 }}>{title}</span>
+          </div>
+          {subtitle && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{subtitle}</div>}
+        </div>
+        <button onClick={onToggleEdit} style={{
+          padding: '4px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
+          background: isEditing ? color : 'var(--bg-elevated)',
+          color: isEditing ? '#fff' : 'var(--text-secondary)',
+          border: isEditing ? 'none' : '1px solid var(--border)',
+        }}>{isEditing ? '完成' : '✏️ 編輯'}</button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function EditRow({ children }) {
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{children}</div>;
+}
+
+function DisplayRow({ children }) {
+  return <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>{children}</div>;
+}
+
+function EqResult({ children, color }) {
+  return (
+    <>
+      <span style={{ fontSize: 13, color: 'var(--text-muted)', margin: '0 2px' }}>＝</span>
+      <span style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: color || 'var(--amber)' }}>{children}</span>
+    </>
+  );
+}
+
+function NumInput({ value, onChange, width = 100 }) {
+  return (
+    <input type="number" min="0" value={value}
+      onChange={e => onChange(Number(e.target.value))}
+      style={{ width, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, background: 'var(--bg-base)', color: '#fff', fontWeight: 700, textAlign: 'center', outline: 'none' }}
+    />
+  );
+}
+
+function OTRow({ label, formula, result, color }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg-base)', borderRadius: 8 }}>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2, fontFamily: 'var(--mono)' }}>{formula}</div>
+      </div>
+      <div style={{ fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: color || 'var(--amber)' }}>{result}</div>
+    </div>
+  );
+}
+
+const muteTxt = { fontSize: 13, color: 'var(--text-muted)' };
+const whiteVal = { fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: '#ffffff' };
