@@ -130,7 +130,7 @@ export default function SalaryRuleManager() {
             <button key={tab.key} onClick={() => setActiveSection(tab.key)} style={{
               padding: '7px 16px', borderRadius: 6, fontSize: 13, fontWeight: activeSection === tab.key ? 700 : 400,
               background: activeSection === tab.key ? 'var(--amber)' : 'transparent',
-              color: activeSection === tab.key ? '#000' : 'var(--text-secondary)',
+              color: activeSection === tab.key ? '#fff' : 'var(--text-secondary)',
               border: 'none', cursor: 'pointer',
             }}>{tab.label}</button>
           ))}
@@ -138,7 +138,7 @@ export default function SalaryRuleManager() {
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           {saved && <span style={{ fontSize: 13, color: 'var(--green)' }}>✓ 已儲存</span>}
           <button onClick={handleSave} disabled={saving} style={{
-            padding: '8px 20px', background: 'var(--amber)', color: '#000',
+            padding: '8px 20px', background: 'var(--amber)', color: '#ffffff',
             borderRadius: 8, fontWeight: 700, fontSize: 13, cursor: 'pointer', border: 'none',
           }}>{saving ? '儲存中...' : '💾 儲存設定'}</button>
         </div>
@@ -630,7 +630,7 @@ function DeductCard({ title, prefix, color, isEditing, onToggleEdit, subtitle, c
         <button onClick={onToggleEdit} style={{
           padding: '4px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', flexShrink: 0,
           background: isEditing ? color : 'var(--bg-elevated)',
-          color: isEditing ? '#000' : 'var(--text-secondary)',
+          color: isEditing ? '#fff' : 'var(--text-secondary)',
           border: isEditing ? 'none' : '1px solid var(--border)',
         }}>{isEditing ? '完成' : '✏️ 編輯'}</button>
       </div>
