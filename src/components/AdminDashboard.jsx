@@ -257,7 +257,7 @@ export default function AdminDashboard() {
 
 
 
-      <div style={{ width: '100%' }}>
+      <div key={activeTab} style={{ width: '100%' }}>
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && activeTab === '薪資結算' && <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />}
         {!loading && activeTab === '打卡紀錄' && <RecordsTab punches={allPunches} employees={employees} />}
