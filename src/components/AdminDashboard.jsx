@@ -85,6 +85,8 @@ export default function AdminDashboard() {
   const totalPayroll = salarySummaries.reduce((s, e) => s + e.netSalary, 0);
   const pendingLeaves = allLeaves.filter(l => l.status === 'pending').length;
   React.useEffect(() => { setPendingLeaveCount(pendingLeaves); }, [pendingLeaves]);
+  // 未填到職日的員工
+  const noHiredAtEmps = employees.filter(e => !e.hiredAt);
 
   async function handleAddEmployee() {
     setAddError('');
@@ -214,7 +216,7 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: pendingLeaves > 0 ? 16 : 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: (pendingLeaves > 0 || noHiredAtEmps.length > 0) ? 16 : 28 }}>
         <KpiCard label="員工人數" value={employees.length} unit="人" />
         <KpiCard label="本月打卡次數" value={allPunches.length} unit="次" color="var(--blue)" />
         <KpiCard label="待審假單" value={pendingLeaves} unit="筆" color={pendingLeaves > 0 ? 'var(--red)' : 'var(--text-muted)'} />
@@ -257,7 +259,43 @@ export default function AdminDashboard() {
         </div>
       )}
 
-
+      {/* 未填到職日通知 */}
+      {noHiredAtEmps.length > 0 && (
+        <div style={{ marginBottom: 28, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {pendingLeaves === 0 && (
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 2 }}>🔔 待處理通知</div>
+          )}
+          <button
+            onClick={() => setActiveTab('員工管理')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14, width: '100%',
+              padding: '14px 18px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.3)',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(245,158,11,0.12)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(245,158,11,0.06)'}
+          >
+            <div style={{
+              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+              background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+            }}>📅</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>
+                {noHiredAtEmps.length} 位員工尚未設定到職日
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                {noHiredAtEmps.map(e => e.name).join('、')} · 點擊前往員工管理設定 →
+              </div>
+            </div>
+            <div style={{
+              background: 'var(--amber)', color: '#fff', borderRadius: 999,
+              fontSize: 13, fontWeight: 700, padding: '3px 12px', flexShrink: 0,
+            }}>{noHiredAtEmps.length}</div>
+          </button>
+        </div>
+      )}
 
       <div style={{ width: '100%' }}>
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
