@@ -1,5 +1,6 @@
 // src/components/SalaryRuleManager.jsx
 import React, { useState, useEffect } from 'react';
+import { useAdminNav } from '../contexts/AdminNavContext';
 import { doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
 import { db } from '../firebase';
 
@@ -62,6 +63,8 @@ async function fetchWorkingDays(year, month) {
 }
 
 export default function SalaryRuleManager() {
+  const { activeTab } = useAdminNav();
+  if (activeTab !== '月薪算法') return null;
   const [rules, setRules] = useState(null);
   const [positions, setPositions] = useState([]);
   const [saving, setSaving] = useState(false);
