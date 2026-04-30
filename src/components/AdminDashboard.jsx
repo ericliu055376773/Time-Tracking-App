@@ -125,10 +125,17 @@ export default function AdminDashboard() {
 
   async function handleUpdateEmployee() {
     try {
+      // 決定最終 pin：有新密碼就用新的，沒有就保留原本的
+      const finalPin = (editForm.newPassword && editForm.newPassword.length >= 1)
+        ? editForm.newPassword
+        : editForm.pin || '';
+
       await updateDoc(doc(db, 'users', editForm.id), {
         name: editForm.name,
         positionId: editForm.positionId || '',
-        payType: editForm.payType, hourlyRate: Number(editForm.hourlyRate),
+        payType: editForm.payType,
+        hourlyRate: Number(editForm.hourlyRate),
+        pin: finalPin,   // 永遠明確儲存 pin
         hiredAt: (() => {
           if (!editForm.hiredAt) return null;
           try {
@@ -139,11 +146,6 @@ export default function AdminDashboard() {
           } catch { return null; }
         })(),
       });
-      // 修改密碼
-      if (editForm.newPassword && editForm.newPassword.length >= 1) {
-        // 直接更新 Firestore 的 pin 欄位（登入時用此欄位查詢）
-        await updateDoc(doc(db, 'users', editForm.id), { pin: editForm.newPassword });
-      }
       setEditingEmp(null);
       await fetchAll();
     } catch (err) { alert('更新失敗：' + err.message); }
@@ -257,32 +259,27 @@ export default function AdminDashboard() {
 
 
 
-      <div key={activeTab} style={{ width: '100%' }}>
+      <div style={{ width: '100%' }}>
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
-        {!loading && activeTab === '薪資結算' && <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />}
-        {!loading && activeTab === '打卡紀錄' && <RecordsTab punches={allPunches} employees={employees} />}
-        {!loading && activeTab === '員工查詢' && <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} />}
-        {!loading && activeTab === '請假審核' && <LeaveManager isAdmin={true} />}
-        {!loading && activeTab === 'WiFi 設定' && <WifiSettings />}
-        {!loading && activeTab === '職位薪資' && <PositionManager />}
-        {!loading && activeTab === '班別設定' && <ShiftManager />}
-        {!loading && activeTab === '系統設定' && <SystemSettings />}
-        {!loading && activeTab === '月薪算法' && <SalaryRuleManager />}
-        {!loading && activeTab === '排班管理' && <ScheduleManager />}
-        {!loading && activeTab === '特休天數' && <AnnualLeaveManager subTab="特休天數" />}
-        {!loading && activeTab === '未休補償' && <AnnualLeaveManager subTab="未休補償" />}
-        {!loading && (activeTab === '員工管理' || activeTab === '員工薪資') && (
-          <EmployeesTab
-            employees={employees}
-            editingEmp={editingEmp} editForm={editForm}
-            onEdit={emp => { setEditingEmp(emp.id); setEditForm({ ...emp }); }}
-            onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))}
-            onSave={handleUpdateEmployee}
-            onCancel={() => setEditingEmp(null)}
-            onDelete={handleDeleteEmployee}
-            positions={positions}
-          />
-        )}
+        {!loading && (() => {
+          switch(activeTab) {
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />;
+            case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} />;
+            case '請假審核': return <LeaveManager isAdmin={true} />;
+            case 'WiFi 設定': return <WifiSettings />;
+            case '職位薪資': return <PositionManager />;
+            case '班別設定': return <ShiftManager />;
+            case '系統設定': return <SystemSettings />;
+            case '月薪算法': return <SalaryRuleManager />;
+            case '排班管理': return <ScheduleManager />;
+            case '特休天數': return <AnnualLeaveManager subTab="特休天數" />;
+            case '未休補償': return <AnnualLeaveManager subTab="未休補償" />;
+            case '員工管理':
+            case '員工薪資': return <EmployeesTab employees={employees} editingEmp={editingEmp} editForm={editForm} onEdit={emp => { setEditingEmp(emp.id); setEditForm({ ...emp }); }} onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))} onSave={handleUpdateEmployee} onCancel={() => setEditingEmp(null)} onDelete={handleDeleteEmployee} positions={positions} />;
+            default: return null;
+          }
+        })()}
       </div>
 
       {showMakePunch && (
@@ -408,7 +405,7 @@ function SalaryTab({ summaries, month, positions }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
     <div className="table-wrapper">
-      <table style={{ minWidth: 700 }}>
+      <table style={{ minWidth: 800 }}>
         <thead>
           <tr><th>姓名</th><th>職位</th><th>薪資類型</th><th>費率</th><th>工時</th><th>加班</th><th>請假扣薪</th><th>實發薪資</th><th>薪資單</th></tr>
         </thead>
@@ -417,14 +414,14 @@ function SalaryTab({ summaries, month, positions }) {
             <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>尚無員工資料</td></tr>
           ) : summaries.map(emp => (
             <tr key={emp.id}>
-              <td style={{ fontWeight: 500 }}>{emp.name}</td>
-              <td style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{emp.positionId ? (posMap[emp.positionId]?.name || '--') : '--'}</td>
+              <td style={{ fontWeight: 600 }}>{emp.name}</td>
+              <td>{emp.positionId ? (posMap[emp.positionId]?.name || '--') : '--'}</td>
               <td><span className={`badge ${emp.payType === 'hourly' ? 'badge-amber' : 'badge-muted'}`}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</span></td>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(posMap[emp.positionId]?.baseSalary ?? emp.monthlySalary ?? 0).toLocaleString()}/mo`}</td>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{emp.totalHours > 0 ? fmtHours(emp.totalHours) : <span style={{ color: 'var(--text-muted)' }}>0h</span>}</td>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: emp.totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{emp.totalOvertimeHours > 0 ? fmtHours(emp.totalOvertimeHours) : '--'}</td>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: emp.leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{emp.leaveDeduction > 0 ? `-${fmtMoney(emp.leaveDeduction)}` : '--'}</td>
-              <td style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600, color: emp.netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(emp.netSalary)}</td>
+              <td style={{ fontFamily: 'var(--mono)' }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(posMap[emp.positionId]?.baseSalary ?? emp.monthlySalary ?? 0).toLocaleString()}/mo`}</td>
+              <td style={{ fontFamily: 'var(--mono)' }}>{emp.totalHours > 0 ? fmtHours(emp.totalHours) : '--'}</td>
+              <td style={{ fontFamily: 'var(--mono)', color: emp.totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{emp.totalOvertimeHours > 0 ? fmtHours(emp.totalOvertimeHours) : '--'}</td>
+              <td style={{ fontFamily: 'var(--mono)', color: emp.leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{emp.leaveDeduction > 0 ? `-${fmtMoney(emp.leaveDeduction)}` : '--'}</td>
+              <td style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: emp.netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(emp.netSalary)}</td>
               <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} /></td>
             </tr>
           ))}
@@ -593,10 +590,15 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                 <label style={{ ...labelStyle, flex: '1 1 130px' }}><span>姓名</span>
                   <input value={editForm.name||''} onChange={e => onEditChange('name', e.target.value)} />
                 </label>
-                {/* 新密碼 */}
-                <label style={{ ...labelStyle, flex: '1 1 160px' }}><span>新密碼（10位數字或英文）</span>
-                  <input type="text" maxLength={10} value={editForm.newPassword||''} onChange={e => { const v = e.target.value.split('').filter(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')).join('').slice(0,10); onEditChange('newPassword', v); }} placeholder="輸入最多10碼" />
-                </label>
+                {/* 目前 PIN + 新密碼 */}
+                <div style={{ flex: '1 1 160px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                    目前 PIN：<span style={{ color: 'var(--text-primary)', fontFamily: 'var(--mono)', letterSpacing: '0.12em' }}>{editForm.pin || '（未設定）'}</span>
+                  </div>
+                  <label style={{ ...labelStyle }}><span>更改 PIN（留空=不變）</span>
+                    <input type="text" maxLength={10} value={editForm.newPassword||''} onChange={e => { const v = e.target.value.split('').filter(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')).join('').slice(0,10); onEditChange('newPassword', v); }} placeholder="輸入最多10碼" />
+                  </label>
+                </div>
                 {/* 職位 */}
                 <label style={{ ...labelStyle, flex: '1 1 150px' }}><span>職位</span>
                   <select value={editForm.positionId||''} onChange={e => onEditChange('positionId', e.target.value)}>
