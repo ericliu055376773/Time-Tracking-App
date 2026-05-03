@@ -136,12 +136,32 @@ export default function AdminDashboard() {
         ? editForm.newPassword
         : editForm.pin || '';
 
-      await updateDoc(doc(db, 'users', editForm.id), {
+      // ✅ Bug Fix: 驗證 PIN 必須是 10 位純數字，防止員工登入輸入框無法打出英文 PIN
+      if (editForm.newPassword && editForm.newPassword.length >= 1) {
+        if (!/^\d{10}$/.test(finalPin)) {
+          alert('PIN 碼必須是 10 位純數字');
+          return;
+        }
+      }
+
+      const updateData = {
         name: editForm.name,
         positionId: editForm.positionId || '',
         payType: editForm.payType,
         hourlyRate: Number(editForm.hourlyRate),
         pin: finalPin,   // 永遠明確儲存 pin
+      };
+
+      // ✅ Bug Fix: 舊帳號遷移 — 如果 Firestore 沒有 authPassword 欄位，
+      // 代表這是舊帳號（Firebase Auth 密碼 = 原始 PIN）。
+      // 在 PIN 被覆蓋之前，先把舊 PIN 存進 authPassword，
+      // 之後登入流程就能用 authPassword 去比對 Firebase Auth，永遠不會斷。
+      if (!editForm.authPassword && editForm.pin) {
+        updateData.authPassword = String(editForm.pin);
+      }
+
+      await updateDoc(doc(db, 'users', editForm.id), {
+        ...updateData,
         hiredAt: (() => {
           if (!editForm.hiredAt) return null;
           try {
@@ -675,7 +695,24 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                     目前 PIN：<span style={{ color: 'var(--text-primary)', fontFamily: 'var(--mono)', letterSpacing: '0.12em' }}>{editForm.pin || '（未設定）'}</span>
                   </div>
                   <label style={{ ...labelStyle }}><span>更改 PIN（留空=不變）</span>
-                    <input type="text" maxLength={10} value={editForm.newPassword||''} onChange={e => { const v = e.target.value.split('').filter(c => (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')).join('').slice(0,10); onEditChange('newPassword', v); }} placeholder="輸入最多10碼" />
+                    <input
+                      type="password"
+                      inputMode="numeric"
+                      maxLength={10}
+                      value={editForm.newPassword||''}
+                      onChange={e => {
+                        // ✅ Bug Fix: 只允許數字，與員工登入輸入框保持一致
+                        const v = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        onEditChange('newPassword', v);
+                      }}
+                      placeholder="輸入 10 位純數字"
+                    />
+                    {editForm.newPassword
+                      ? <span style={{ fontSize: 11, color: (editForm.newPassword.length === 10) ? 'var(--green)' : 'var(--red)', marginTop: 2 }}>
+                          {editForm.newPassword.length} / 10 位{editForm.newPassword.length === 10 ? ' ✓' : '（需滿 10 位）'}
+                        </span>
+                      : null
+                    }
                   </label>
                 </div>
                 {/* 職位 */}
