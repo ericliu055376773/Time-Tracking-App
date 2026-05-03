@@ -5,7 +5,9 @@ import {
   doc, updateDoc, setDoc, getDoc, addDoc, deleteDoc, Timestamp, serverTimestamp
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
-import { db, auth } from '../firebase';
+import { db, auth, firebaseConfig } from '../firebase';
+import { initializeApp, getApps } from 'firebase/app';
+import { getAuth } from 'firebase/auth';
 import { calcSalaryFromPunches, fmtMoney, fmtHours } from '../hooks/useSalaryCalc';
 import { getNetworkInfo, isAllowedNetwork } from '../hooks/useNetworkCheck';
 import SalaryReport from './SalaryReport';
@@ -186,6 +188,46 @@ export default function AdminDashboard() {
       await Promise.all(delPunches);
       await fetchAll();
     } catch (err) { alert('刪除失敗：' + err.message); }
+  }
+
+  // ✅ 修復已損壞的帳號（Firebase Auth 密碼與 Firestore PIN 不同步）
+  // 使用次要 Firebase App 建立新 Auth 帳號，保留打卡紀錄，管理員 session 不中斷
+  async function handleRepairAccount(emp) {
+    if (!window.confirm(`確定修復「${emp.name}」的帳號？\n修復後此員工可用目前的 PIN（${emp.pin}）正常登入。`)) return;
+    try {
+      // 1. 取得或建立次要 Firebase App（避免把管理員登出）
+      const secondaryApp = getApps().find(a => a.name === 'secondary')
+        || initializeApp(firebaseConfig, 'secondary');
+      const secondaryAuth = getAuth(secondaryApp);
+
+      // 2. 用次要 App 建立新的 Firebase Auth 帳號
+      const newEmail = `repaired_${emp.empId.toLowerCase()}_${Date.now()}@internal.timeclock`;
+      const newAuthPassword = `timeclock_repaired_${emp.empId.toLowerCase()}`;
+      const newCred = await createUserWithEmailAndPassword(secondaryAuth, newEmail, newAuthPassword);
+      const newUid = newCred.user.uid;
+      await secondaryAuth.signOut(); // 次要 App 登出，不影響主 auth
+
+      // 3. 把 Firestore 使用者文件複製到新 UID
+      const { id: _oldId, ...empData } = emp;
+      await setDoc(doc(db, 'users', newUid), {
+        ...empData,
+        email: newEmail,
+        authPassword: newAuthPassword,
+      });
+
+      // 4. 把所有打卡紀錄的 uid 更新成新 UID（保留歷史資料）
+      const punchSnap = await getDocs(query(collection(db, 'punches'), where('uid', '==', emp.id)));
+      const migrations = punchSnap.docs.map(d => updateDoc(doc(db, 'punches', d.id), { uid: newUid }));
+      await Promise.all(migrations);
+
+      // 5. 刪除舊的 Firestore 使用者文件（舊 Firebase Auth 帳號留著無妨，只是孤兒）
+      await deleteDoc(doc(db, 'users', emp.id));
+
+      alert(`✅ 修復完成！\n「${emp.name}」現在可以用 PIN ${emp.pin} 正常登入。\n共遷移 ${punchSnap.docs.length} 筆打卡紀錄。`);
+      await fetchAll();
+    } catch (err) {
+      alert('修復失敗：' + err.message);
+    }
   }
 
   async function handleMakePunch() {
@@ -375,7 +417,7 @@ export default function AdminDashboard() {
             case '特休天數': return <AnnualLeaveManager subTab="特休天數" />;
             case '未休補償': return <AnnualLeaveManager subTab="未休補償" />;
             case '員工管理':
-            case '員工薪資': return <EmployeesTab employees={employees} editingEmp={editingEmp} editForm={editForm} onEdit={emp => { setEditingEmp(emp.id); setEditForm({ ...emp }); }} onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))} onSave={handleUpdateEmployee} onCancel={() => setEditingEmp(null)} onDelete={handleDeleteEmployee} positions={positions} />;
+            case '員工薪資': return <EmployeesTab employees={employees} editingEmp={editingEmp} editForm={editForm} onEdit={emp => { setEditingEmp(emp.id); setEditForm({ ...emp }); }} onEditChange={(k, v) => setEditForm(f => ({ ...f, [k]: v }))} onSave={handleUpdateEmployee} onCancel={() => setEditingEmp(null)} onDelete={handleDeleteEmployee} onRepair={handleRepairAccount} positions={positions} />;
             default: return null;
           }
         })()}
@@ -664,7 +706,7 @@ function calcAnnualLeave(months) {
   return Math.min(15 + Math.floor(months / 12) - 10, 30);
 }
 
-function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, onSave, onCancel, onDelete, positions }) {
+function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, onSave, onCancel, onDelete, onRepair, positions }) {
   const [deleteConfirm, setDeleteConfirm] = React.useState(null);
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
@@ -788,6 +830,12 @@ function EmployeesTab({ employees, editingEmp, editForm, onEdit, onEditChange, o
                     </div>
                   )}
                   <button onClick={() => onEdit(emp)} style={{ padding: '7px 14px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12 }}>編輯</button>
+                  {/* ✅ 修復按鈕：只對沒有 authPassword 的損壞帳號顯示 */}
+                  {!emp.authPassword && emp.pin && (
+                    <button onClick={() => onRepair(emp)} style={{ padding: '7px 14px', background: 'rgba(245,158,11,0.15)', color: 'var(--amber)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: 6, fontSize: 12, fontWeight: 600 }}>
+                      ⚠️ 修復帳號
+                    </button>
+                  )}
                   <button onClick={() => setDeleteConfirm(emp)} style={{ padding: '7px 14px', background: 'var(--red-glow)', color: 'var(--red)', border: '1px solid rgba(239,68,68,0.3)', borderRadius: 6, fontSize: 12 }}>刪除</button>
                 </div>
               </div>
