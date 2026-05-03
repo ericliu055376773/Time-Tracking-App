@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase';
@@ -106,7 +105,7 @@ export default function ShiftManager() {
           <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 3 }}>目前共 {shifts.length} 個班別</div>
         </div>
         <button onClick={openAdd} disabled={shifts.length >= 26} style={{
-          padding: '9px 18px', background: 'var(--amber)', color: '#000',
+          padding: '9px 18px', background: 'var(--text-primary)', color: '#ffffff',
           border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: 'pointer',
         }}>+ 新增班別</button>
       </div>
@@ -211,7 +210,7 @@ export default function ShiftManager() {
 
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: '11px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, cursor: 'pointer' }}>取消</button>
-                <button onClick={handleSave} style={{ flex: 2, padding: '11px', background: 'var(--amber)', color: '#000', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+                <button onClick={handleSave} style={{ flex: 2, padding: '11px', background: 'var(--amber)', color: '#ffffff', border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
                   {editingId ? '儲存變更' : '建立班別'}
                 </button>
               </div>
