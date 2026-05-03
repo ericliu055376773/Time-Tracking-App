@@ -18,10 +18,14 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [logoClickCount, setLogoClickCount] = useState(0);
   const [appName, setAppName] = useState('TIMECLOCK');
+  const [logoUrl, setLogoUrl] = useState('');
 
   useEffect(() => {
     getDoc(doc(db, 'settings', 'general')).then(snap => {
-      if (snap.exists() && snap.data().appName) setAppName(snap.data().appName);
+      if (snap.exists()) {
+        if (snap.data().appName) setAppName(snap.data().appName);
+        if (snap.data().logoUrl) setLogoUrl(snap.data().logoUrl);
+      }
     }).catch(() => {});
   }, []);
 
@@ -59,16 +63,36 @@ export default function Login() {
     if (pin.length !== 10) { setError('PIN 碼必須是 10 位數字'); return; }
     reset(); setLoading(true);
     try {
-      // 用 PIN 查 Firestore，再用 authPassword 登入 Firebase Auth
+      // 用 PIN 查 Firestore
       let snap = await getDocs(query(collection(db, 'users'), where('pin', '==', pin), where('role', '==', 'employee')));
       if (snap.empty) {
         snap = await getDocs(query(collection(db, 'users'), where('pin', '==', Number(pin)), where('role', '==', 'employee')));
       }
       if (snap.empty) { setError('PIN 碼錯誤，請確認後再試'); setLoading(false); return; }
       const userData = snap.docs[0].data();
-      // 優先用 authPassword，沒有就用 pin（舊帳號相容）
-      const authPwd = userData.authPassword || pin;
-      await signInWithEmailAndPassword(auth, userData.email, authPwd);
+
+      // 嘗試所有可能的 Firebase Auth 密碼格式
+      const pwdCandidates = [
+        userData.authPassword,   // 新系統存的固定密碼
+        pin,                     // 舊系統用 PIN 當密碼
+      ].filter(Boolean);
+
+      let loginSuccess = false;
+      let lastErr = null;
+      for (const pwd of pwdCandidates) {
+        try {
+          await signInWithEmailAndPassword(auth, userData.email, pwd);
+          loginSuccess = true;
+          break;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+
+      if (!loginSuccess) {
+        const msgs = { 'auth/invalid-credential': 'PIN 碼錯誤，請聯繫管理員重設', 'auth/too-many-requests': '嘗試次數過多，請稍後再試' };
+        setError(msgs[lastErr?.code] || 'PIN 碼錯誤，請聯繫管理員重設');
+      }
     } catch (err) {
       const msgs = { 'auth/invalid-credential': 'PIN 碼錯誤', 'auth/too-many-requests': '嘗試次數過多，請稍後再試' };
       setError(msgs[err.code] || '登入失敗：' + err.message);
@@ -121,14 +145,18 @@ export default function Login() {
         <div style={{ marginBottom: 32, textAlign: 'center' }}>
           <div onClick={handleLogoClick} style={{
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 64, height: 64, background: 'var(--amber-glow)',
-            border: `1px solid ${logoClickCount > 0 ? 'var(--amber)' : 'rgba(245,158,11,0.4)'}`,
-            borderRadius: 16, marginBottom: 16, cursor: 'pointer', transition: 'all 0.15s',
+            width: 72, height: 72, background: logoUrl ? 'transparent' : 'var(--amber-glow)',
+            border: logoUrl ? 'none' : `1px solid ${logoClickCount > 0 ? 'var(--amber)' : 'rgba(245,158,11,0.4)'}`,
+            borderRadius: 18, marginBottom: 16, cursor: 'pointer', transition: 'all 0.15s',
             transform: logoClickCount > 0 ? 'scale(0.95)' : 'scale(1)',
+            overflow: 'hidden',
           }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="1.8">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
+            {logoUrl
+              ? <img src={logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" strokeWidth="1.8">
+                  <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+                </svg>
+            }
           </div>
           <h1 style={{ fontFamily: 'var(--mono)', fontSize: 20, fontWeight: 500, color: 'var(--text-primary)', letterSpacing: '0.08em' }}>
             {appName}
