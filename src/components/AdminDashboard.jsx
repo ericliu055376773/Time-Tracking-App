@@ -87,6 +87,10 @@ export default function AdminDashboard() {
   React.useEffect(() => { setPendingLeaveCount(pendingLeaves); }, [pendingLeaves]);
   // 未填到職日的員工
   const noHiredAtEmps = employees.filter(e => !e.hiredAt);
+  // 待審特休
+  const pendingAnnual = allLeaves.filter(l => l.status === 'pending' && l.type === '特休').length;
+  // 待審一般請假（非特休）
+  const pendingOther = allLeaves.filter(l => l.status === 'pending' && l.type !== '特休').length;
 
   async function handleAddEmployee() {
     setAddError('');
@@ -224,9 +228,48 @@ export default function AdminDashboard() {
       </div>
 
       {/* 通知卡片 */}
-      {pendingLeaves > 0 && (
-        <div style={{ marginBottom: 28, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 2 }}>🔔 待處理通知</div>
+      {(pendingLeaves > 0 || noHiredAtEmps.length > 0) && (
+        <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 8 }}>🔔 待處理通知</div>
+      )}
+
+      {/* 待審特休 */}
+      {pendingAnnual > 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <button
+            onClick={() => setActiveTab('請假審核')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 14, width: '100%',
+              padding: '14px 18px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+              background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.3)',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = 'rgba(34,197,94,0.12)'}
+            onMouseLeave={e => e.currentTarget.style.background = 'rgba(34,197,94,0.06)'}
+          >
+            <div style={{
+              width: 40, height: 40, borderRadius: 10, flexShrink: 0,
+              background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18,
+            }}>🌴</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>
+                有 {pendingAnnual} 筆特休申請待審核
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                點擊前往請假審核 →
+              </div>
+            </div>
+            <div style={{
+              background: 'var(--green)', color: '#fff', borderRadius: 999,
+              fontSize: 13, fontWeight: 700, padding: '3px 12px', flexShrink: 0,
+            }}>{pendingAnnual}</div>
+          </button>
+        </div>
+      )}
+
+      {/* 待審一般請假 */}
+      {pendingOther > 0 && (
+        <div style={{ marginBottom: 10 }}>
           <button
             onClick={() => setActiveTab('請假審核')}
             style={{
@@ -245,7 +288,7 @@ export default function AdminDashboard() {
             }}>📋</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text-primary)', marginBottom: 2 }}>
-                有 {pendingLeaves} 筆請假單待審核
+                有 {pendingOther} 筆請假單待審核
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
                 點擊前往請假審核 →
@@ -254,7 +297,7 @@ export default function AdminDashboard() {
             <div style={{
               background: 'var(--red)', color: '#fff', borderRadius: 999,
               fontSize: 13, fontWeight: 700, padding: '3px 12px', flexShrink: 0,
-            }}>{pendingLeaves}</div>
+            }}>{pendingOther}</div>
           </button>
         </div>
       )}
@@ -262,9 +305,7 @@ export default function AdminDashboard() {
       {/* 未填到職日通知 */}
       {noHiredAtEmps.length > 0 && (
         <div style={{ marginBottom: 28, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {pendingLeaves === 0 && (
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.08em', marginBottom: 2 }}>🔔 待處理通知</div>
-          )}
+
           <button
             onClick={() => setActiveTab('員工管理')}
             style={{
@@ -799,9 +840,12 @@ function WifiSettings() {
         </button>
         {currentInfo && (
           <div style={{ background: 'var(--bg-elevated)', borderRadius: 8, padding: '12px 14px', marginBottom: 14, fontSize: 12, lineHeight: 1.8, fontFamily: 'var(--mono)' }}>
-            <div>公共 IP：<span style={{ color: 'var(--amber)' }}>{currentInfo.publicIP || '無法取得'}</span></div>
-            <div>本地 IP：<span style={{ color: 'var(--amber)' }}>{currentInfo.localIP || '無法取得'}</span></div>
-            <div>子網路：<span style={{ color: 'var(--amber)' }}>{currentInfo.localIP ? `${currentInfo.localIP.split('.').slice(0,3).join('.')}.x` : '無法取得'}</span></div>
+            <div>公共 IP：<span style={{ color: currentInfo.publicIP ? 'var(--green)' : 'var(--red)' }}>{currentInfo.publicIP || '無法取得'}</span></div>
+            <div>本地 IP：<span style={{ color: currentInfo.localIP ? 'var(--amber)' : 'var(--text-muted)' }}>{currentInfo.localIP || '瀏覽器安全限制，無法取得'}</span></div>
+            <div>子網路：<span style={{ color: currentInfo.localIP ? 'var(--amber)' : 'var(--text-muted)' }}>{currentInfo.localIP ? `${currentInfo.localIP.split('.').slice(0,3).join('.')}.x` : '——'}</span></div>
+            {!currentInfo.localIP && currentInfo.publicIP && (
+              <div style={{ marginTop: 6, color: 'var(--green)', fontSize: 11 }}>✓ 將改用公共 IP（{currentInfo.publicIP}）進行 WiFi 驗證</div>
+            )}
           </div>
         )}
         <div style={{ display: 'flex', gap: 10 }}>
@@ -1000,12 +1044,18 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
 // ── 系統設定 ─────────────────────────────────────────────────
 function SystemSettings() {
   const [appName, setAppNameState] = React.useState('TIMECLOCK');
+  const [logoUrl, setLogoUrl] = React.useState('');
   const [saved, setSaved] = React.useState(false);
+  const [logoSaved, setLogoSaved] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const fileRef = React.useRef(null);
 
   React.useEffect(() => {
     getDoc(doc(db, 'settings', 'general')).then(snap => {
-      if (snap.exists() && snap.data().appName) setAppNameState(snap.data().appName);
+      if (snap.exists()) {
+        if (snap.data().appName) setAppNameState(snap.data().appName);
+        if (snap.data().logoUrl) setLogoUrl(snap.data().logoUrl);
+      }
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -1018,12 +1068,35 @@ function SystemSettings() {
     } catch (err) { alert('儲存失敗：' + err.message); }
   }
 
+  function handleLogoFile(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 200 * 1024) { alert('圖片請小於 200KB'); return; }
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      const dataUrl = ev.target.result;
+      setLogoUrl(dataUrl);
+      try {
+        await setDoc(doc(db, 'settings', 'general'), { logoUrl: dataUrl }, { merge: true });
+        setLogoSaved(true);
+        setTimeout(() => setLogoSaved(false), 3000);
+      } catch (err) { alert('上傳失敗：' + err.message); }
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleRemoveLogo() {
+    setLogoUrl('');
+    await setDoc(doc(db, 'settings', 'general'), { logoUrl: '' }, { merge: true });
+  }
+
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-secondary)' }}>載入中...</div>;
 
   return (
-    <div style={{ maxWidth: 500 }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 20 }}>⚙️ 系統設定</div>
+    <div style={{ maxWidth: 500, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ fontSize: 15, fontWeight: 700 }}>⚙️ 系統設定</div>
 
+      {/* 系統名稱 */}
       <div className="card" style={{ padding: '20px 24px' }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>系統名稱</div>
         <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 12 }}>
@@ -1048,6 +1121,60 @@ function SystemSettings() {
           }}>儲存</button>
         </div>
         {saved && <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 8 }}>✓ 已儲存，重新整理後生效</div>}
+      </div>
+
+      {/* Logo 圖片 */}
+      <div className="card" style={{ padding: '20px 24px' }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>登入頁 Logo 圖片</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 16 }}>
+          上傳後取代登入頁的時鐘圖示，建議使用正方形圖片，大小不超過 200KB
+        </div>
+
+        {/* 預覽 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+          <div style={{
+            width: 72, height: 72, borderRadius: 16,
+            border: '2px dashed var(--border)',
+            background: 'var(--bg-surface)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            overflow: 'hidden', flexShrink: 0,
+          }}>
+            {logoUrl
+              ? <img src={logoUrl} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontSize: 28 }}>🏷️</span>
+            }
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <button
+              onClick={() => fileRef.current?.click()}
+              style={{
+                padding: '8px 18px', background: 'var(--amber)', color: '#fff',
+                borderRadius: 7, fontSize: 12, fontWeight: 700, border: 'none', cursor: 'pointer',
+              }}
+            >
+              {logoUrl ? '更換圖片' : '上傳圖片'}
+            </button>
+            {logoUrl && (
+              <button
+                onClick={handleRemoveLogo}
+                style={{
+                  padding: '8px 18px', background: 'var(--bg-elevated)', color: 'var(--red)',
+                  borderRadius: 7, fontSize: 12, fontWeight: 600,
+                  border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer',
+                }}
+              >移除圖片</button>
+            )}
+          </div>
+        </div>
+
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleLogoFile}
+        />
+        {logoSaved && <div style={{ fontSize: 12, color: 'var(--green)' }}>✓ Logo 已儲存，重新整理後生效</div>}
       </div>
     </div>
   );
