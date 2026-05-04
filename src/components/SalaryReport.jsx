@@ -377,7 +377,18 @@ export default function SalaryReport({
                   {[
                     { label: '底薪', sub: `$${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
                     { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
-                    { label: `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`, sub: salaryBreakdown.hasFullAttendance ? '達成全勤條件' : `未達標：${[salaryBreakdown.hasLate?'有遲到':'', salaryBreakdown.hasLeave?'有請假':'', salaryBreakdown.hasMissedPunch?'有忘打卡':''].filter(Boolean).join('、')}`, amount: salaryBreakdown.fullAttendancePay, isDeduction: false, dim: !salaryBreakdown.hasFullAttendance },
+                    (() => {
+                      const now = new Date();
+                      const [sy, sm] = month.split('-').map(Number);
+                      const isCurrent = now.getFullYear() === sy && (now.getMonth() + 1) === sm;
+                      const fullLabel = isCurrent && salaryBreakdown.hasFullAttendance
+                        ? '全勤獎金 ⏳' : `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
+                      const fullSub = isCurrent && salaryBreakdown.hasFullAttendance
+                        ? '目前條件達成，月底結算後確認'
+                        : salaryBreakdown.hasFullAttendance ? '達成全勤條件'
+                        : `未達標：${[salaryBreakdown.hasLate?'有遲到':'', salaryBreakdown.hasLeave?'有請假':'', salaryBreakdown.hasMissedPunch?'有忘打卡':''].filter(Boolean).join('、')}`;
+                      return { label: fullLabel, sub: fullSub, amount: salaryBreakdown.fullAttendancePay, isDeduction: false, dim: !salaryBreakdown.hasFullAttendance };
+                    })(),
                     { label: '紅利', sub: '月底另行計算', amount: 0, isDeduction: false, dim: true },
                   ].map((item, i) => (
                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)', opacity: item.dim && item.amount === 0 ? 0.45 : 1 }}>
