@@ -126,6 +126,8 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
       }
       totalMinutes += dayMinutes;
 
+      const dayBaseSalary = dailyBase + dailyMeal;
+
       // ✅ Bug Fix: 只有實際有工作時間（或仍在打卡中）的日期才算出勤，
       // 防止「上班下班同秒」的無效打卡被計入薪資天數
       if (ins.length > 0 && (dayMinutes > 0 || isClockedIn)) {
