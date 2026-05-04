@@ -15,6 +15,7 @@ export default function SalaryReport({
   leaves = [],
   month,
   scheduleAssignments = {},
+  maxMissedPunch = 0,
 }) {
   const printRef = useRef(null);
   const [showReport, setShowReport] = useState(false);
@@ -26,7 +27,7 @@ export default function SalaryReport({
     ? { ...employee, monthlySalary: employee._position.baseSalary, mealAllowance: employee._position.mealAllowance }
     : employee;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } =
-    calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month);
+    calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch);
 
   // 計算請假扣薪（時薪制才扣，月薪制已在計算中處理）
   const approvedLeaves = leaves.filter(
