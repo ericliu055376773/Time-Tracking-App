@@ -43,6 +43,7 @@ export default function AdminDashboard() {
   const [makePunchForm, setMakePunchForm] = useState({ uid: '', date: '', time: '', type: 'in', shiftId: '', note: '' });
   const [makePunchLoading, setMakePunchLoading] = useState(false);
   const [makePunchError, setMakePunchError] = useState('');
+  const [scheduleAssignments, setScheduleAssignments] = useState({});
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -63,6 +64,9 @@ export default function AdminDashboard() {
       setAllLeaves(lSnap.docs.map(d => ({ id: d.id, ...d.data() })));
       const posSnap = await getDoc(doc(db, 'settings', 'positions'));
       setPositions(posSnap.exists() ? (posSnap.data().list || []) : []);
+      // ✅ 取得排班資料，用於全勤驗證
+      const schedSnap = await getDoc(doc(db, 'settings', 'schedule'));
+      setScheduleAssignments(schedSnap.exists() ? (schedSnap.data().assignments || {}) : {});
     } catch (err) { console.error(err); }
     setLoading(false);
   }, [selectedMonth]);
@@ -74,7 +78,7 @@ export default function AdminDashboard() {
     const punches = allPunches.filter(p => p.uid === emp.id);
     const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved');
     const empWithPos = { ...emp, _position: posMap2[emp.positionId] || null };
-    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos);
+    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, month);
     const pos2 = posMap2[emp.positionId];
     const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
     const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
@@ -563,7 +567,7 @@ function SalaryTab({ summaries, month, positions }) {
               <td style={{ fontFamily: 'var(--mono)', color: emp.totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{emp.totalOvertimeHours > 0 ? fmtHours(emp.totalOvertimeHours) : '--'}</td>
               <td style={{ fontFamily: 'var(--mono)', color: emp.leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{emp.leaveDeduction > 0 ? `-${fmtMoney(emp.leaveDeduction)}` : '--'}</td>
               <td style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: emp.netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(emp.netSalary)}</td>
-              <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} /></td>
+              <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} /></td>
             </tr>
           ))}
         </tbody>
@@ -1008,7 +1012,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
   const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
   const empWithPos2 = emp ? { ...emp, _position: posMap[emp.positionId] || null } : null;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
-    ? calcSalaryFromPunches(punches, empWithPos2, leaves)
+    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth)
     : { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
 
   const leaveDeduction = emp?.payType === 'hourly'
@@ -1070,16 +1074,11 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
                   const pos = posMap[emp.positionId];
                   const displayBase = pos?.baseSalary ?? emp.monthlySalary ?? 0;
                   const displayMeal = pos?.mealAllowance ?? emp.mealAllowance ?? 0;
-                  // ✅ Fix 3: 本月未結束時，全勤顯示「進行中」而非確認✓
-                  const now = new Date();
-                  const [sy, sm] = selectedMonth.split('-').map(Number);
-                  const isCurrentMonth = now.getFullYear() === sy && (now.getMonth() + 1) === sm;
-                  const fullLabel = isCurrentMonth && salaryBreakdown.hasFullAttendance
-                    ? '全勤獎金 ⏳' : `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
-                  const fullSub = isCurrentMonth && salaryBreakdown.hasFullAttendance
-                    ? '目前條件達成，月底結算後確認'
-                    : salaryBreakdown.hasFullAttendance ? '達成全勤條件'
-                    : [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡'].filter(Boolean).join('、');
+                  const { hasAbsent } = salaryBreakdown;
+                  const fullLabel = `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
+                  const fullSub = salaryBreakdown.hasFullAttendance
+                    ? '達成全勤條件'
+                    : [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡', hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
                   return [
                     { label: '底薪', sub: `$${displayBase.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.basePay) },
                     { label: '餐費', sub: `$${displayMeal.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.mealPay) },
@@ -1114,6 +1113,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
               punches={allPunches.filter(p => p.uid === queryEmpId)}
               leaves={allLeaves.filter(l => l.uid === queryEmpId)}
               month={selectedMonth}
+              scheduleAssignments={scheduleAssignments}
             />
           </div>
 
