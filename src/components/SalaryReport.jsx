@@ -14,6 +14,7 @@ export default function SalaryReport({
   punches,
   leaves = [],
   month,
+  scheduleAssignments = {},
 }) {
   const printRef = useRef(null);
   const [showReport, setShowReport] = useState(false);
@@ -25,7 +26,7 @@ export default function SalaryReport({
     ? { ...employee, monthlySalary: employee._position.baseSalary, mealAllowance: employee._position.mealAllowance }
     : employee;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } =
-    calcSalaryFromPunches(punches, empForCalc, leaves);
+    calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month);
 
   // 計算請假扣薪（時薪制才扣，月薪制已在計算中處理）
   const approvedLeaves = leaves.filter(
@@ -378,15 +379,9 @@ export default function SalaryReport({
                     { label: '底薪', sub: `$${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
                     { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
                     (() => {
-                      const now = new Date();
-                      const [sy, sm] = month.split('-').map(Number);
-                      const isCurrent = now.getFullYear() === sy && (now.getMonth() + 1) === sm;
-                      const fullLabel = isCurrent && salaryBreakdown.hasFullAttendance
-                        ? '全勤獎金 ⏳' : `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
-                      const fullSub = isCurrent && salaryBreakdown.hasFullAttendance
-                        ? '目前條件達成，月底結算後確認'
-                        : salaryBreakdown.hasFullAttendance ? '達成全勤條件'
-                        : `未達標：${[salaryBreakdown.hasLate?'有遲到':'', salaryBreakdown.hasLeave?'有請假':'', salaryBreakdown.hasMissedPunch?'有忘打卡':''].filter(Boolean).join('、')}`;
+                      const violations = [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡', salaryBreakdown.hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
+                      const fullLabel = `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
+                      const fullSub = salaryBreakdown.hasFullAttendance ? '達成全勤條件' : `未達標：${violations}`;
                       return { label: fullLabel, sub: fullSub, amount: salaryBreakdown.fullAttendancePay, isDeduction: false, dim: !salaryBreakdown.hasFullAttendance };
                     })(),
                     { label: '紅利', sub: '月底另行計算', amount: 0, isDeduction: false, dim: true },
