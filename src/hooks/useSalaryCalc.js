@@ -108,10 +108,15 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
       const pairs = Math.min(ins.length, outs.length);
       const isClockedIn = ins.length > outs.length;
 
-      if (ins.length > outs.length && !isClockedIn) hasMissedPunch = true;
-      if (ins.length !== outs.length && !isClockedIn) hasMissedPunch = true;
+      // ✅ 補打卡豁免：當天有任何一筆 isMakeup 補打卡，視為管理員已確認，
+      // 清除遲到紀錄且不算忘打卡，員工仍可獲得全勤獎金
+      const hasMakeup = dayPunches.some(p => p.isMakeup === true);
 
-      const dayLate = ins.reduce((acc, p) => acc + (p.lateMinutes || 0), 0);
+      if (!hasMakeup && ins.length !== outs.length && !isClockedIn) hasMissedPunch = true;
+
+      const dayLate = hasMakeup
+        ? 0  // 補打卡日：遲到歸零
+        : ins.reduce((acc, p) => acc + (p.lateMinutes || 0), 0);
       if (dayLate > 0) hasLate = true;
 
       let dayMinutes = 0;
@@ -121,10 +126,12 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
       }
       totalMinutes += dayMinutes;
 
-      if (ins.length > 0) attendedDays++;
-
-      const dayBaseSalary = dailyBase + dailyMeal;
-      totalSalary += dayBaseSalary;
+      // ✅ Bug Fix: 只有實際有工作時間（或仍在打卡中）的日期才算出勤，
+      // 防止「上班下班同秒」的無效打卡被計入薪資天數
+      if (ins.length > 0 && (dayMinutes > 0 || isClockedIn)) {
+        attendedDays++;
+        totalSalary += dayBaseSalary;
+      }
 
       dailyRecords.push({
         date, isClockedIn, pairCount: pairs,
@@ -140,7 +147,8 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
     });
 
   const approvedLeaves = leaves.filter(l => l.status === 'approved');
-  const hasLeave = approvedLeaves.length > 0;
+  // ✅ 全勤只受病假、事假影響；特休、婚假、喪假不扣全勤
+  const hasLeave = approvedLeaves.some(l => l.type === "病假" || l.type === "事假");
   const hasFullAttendance = !hasLate && !hasLeave && !hasMissedPunch;
   const fullAttendancePay = hasFullAttendance ? FULL_ATTENDANCE_BONUS : 0;
 
