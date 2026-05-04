@@ -1065,12 +1065,28 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14, letterSpacing: '0.08em' }}>薪資計算方式</div>
             {emp.payType === 'monthly' && salaryBreakdown ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {[
-                  { label: '底薪', sub: `$${(emp.monthlySalary||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.basePay) },
-                  { label: '餐費', sub: `$${(emp.mealAllowance||0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.mealPay) },
-                  { label: `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`, sub: salaryBreakdown.hasFullAttendance ? '達成全勤條件' : [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡'].filter(Boolean).join('、'), value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
-                  { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
-                ].map((item, i) => (
+                {(() => {
+                  // ✅ Fix 1+2: 底薪/餐費從職位讀取，不從員工欄位讀
+                  const pos = posMap[emp.positionId];
+                  const displayBase = pos?.baseSalary ?? emp.monthlySalary ?? 0;
+                  const displayMeal = pos?.mealAllowance ?? emp.mealAllowance ?? 0;
+                  // ✅ Fix 3: 本月未結束時，全勤顯示「進行中」而非確認✓
+                  const now = new Date();
+                  const [sy, sm] = selectedMonth.split('-').map(Number);
+                  const isCurrentMonth = now.getFullYear() === sy && (now.getMonth() + 1) === sm;
+                  const fullLabel = isCurrentMonth && salaryBreakdown.hasFullAttendance
+                    ? '全勤獎金 ⏳' : `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
+                  const fullSub = isCurrentMonth && salaryBreakdown.hasFullAttendance
+                    ? '目前條件達成，月底結算後確認'
+                    : salaryBreakdown.hasFullAttendance ? '達成全勤條件'
+                    : [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡'].filter(Boolean).join('、');
+                  return [
+                    { label: '底薪', sub: `$${displayBase.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.basePay) },
+                    { label: '餐費', sub: `$${displayMeal.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.mealPay) },
+                    { label: fullLabel, sub: fullSub, value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
+                    { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
+                  ];
+                })().map((item, i) => (
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', opacity: item.dim && item.value === '—' ? 0.45 : 1 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
