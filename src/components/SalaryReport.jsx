@@ -378,6 +378,7 @@ export default function SalaryReport({
                   {[
                     { label: '底薪', sub: `$${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
                     { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
+                    ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: `換算時薪 $${salaryBreakdown.impliedHourlyRate}/hr × 1.34（前2h）或 1.67（後段），10分鐘為單位`, amount: salaryBreakdown.overtimePay, isDeduction: false }] : []),
                     (() => {
                       const violations = [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡', salaryBreakdown.hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
                       const fullLabel = `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
@@ -519,4 +520,3 @@ const PrintIcon = () => (
     <rect x="6" y="14" width="12" height="8" />
   </svg>
 );
-
