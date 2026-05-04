@@ -23,6 +23,7 @@ const DEFAULT_RULES = {
   hourlyOTMinutes: 10,    // 時薪加班計算單位（分鐘）
   salaryRevealDay: 30,    // 薪資明細開放日（每月幾號）
   punchCutoffMinutes: 30,  // 上班打卡截止（班別開始後幾分鐘鎖定）
+  maxMissedPunchForFullAtt: 0, // 全勤容許忘打卡次數（0 = 完全不容許）
 };
 
 let idCounter = Date.now();
@@ -182,6 +183,27 @@ export default function SalaryRuleManager() {
             {(rules.punchCutoffMinutes ?? 30) === 0
               ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不鎖定）</span>
               : <span style={{ fontSize: 11, color: 'var(--red)' }}>⚠️ 超時需管理員補打，自動失去全勤</span>}
+          </DisplayRow>
+        )}
+      </DeductCard>
+
+      {/* 全勤忘打卡容許次數設定 */}
+      <DeductCard title="全勤容許忘打卡次數" prefix="⚠️" color="var(--amber)"
+        isEditing={editing.missedPunch} onToggleEdit={() => toggleEdit('missedPunch')}>
+        {editing.missedPunch ? (
+          <EditRow>
+            <span style={muteTxt}>當月忘記打卡超過</span>
+            <NumInput value={rules.maxMissedPunchForFullAtt ?? 0} onChange={v => update('maxMissedPunchForFullAtt', Math.max(0, v))} width={70} />
+            <span style={muteTxt}>次則失去全勤（有補打卡不計次，0 = 完全不容許）</span>
+          </EditRow>
+        ) : (
+          <DisplayRow>
+            <span style={muteTxt}>當月忘打卡超過</span>
+            <span style={whiteVal}>{rules.maxMissedPunchForFullAtt ?? 0}</span>
+            <span style={muteTxt}>次則失去全勤</span>
+            {(rules.maxMissedPunchForFullAtt ?? 0) === 0
+              ? <span style={{ fontSize: 11, color: 'var(--red)' }}>（任何一次未補打的忘打卡即失去全勤）</span>
+              : <span style={{ fontSize: 11, color: 'var(--amber)' }}>（有補打卡不計次，只計未修復的忘打卡）</span>}
           </DisplayRow>
         )}
       </DeductCard>
