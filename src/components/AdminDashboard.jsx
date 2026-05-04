@@ -1082,6 +1082,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
                   return [
                     { label: '底薪', sub: `$${displayBase.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.basePay) },
                     { label: '餐費', sub: `$${displayMeal.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.mealPay) },
+                    ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: `換算時薪 $${salaryBreakdown.impliedHourlyRate}/hr（超過 8h，10分鐘為單位）`, value: fmtMoney(salaryBreakdown.overtimePay) }] : []),
                     { label: fullLabel, sub: fullSub, value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
                     { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
                   ];
