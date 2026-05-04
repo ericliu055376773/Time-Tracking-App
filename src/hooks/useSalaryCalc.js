@@ -91,6 +91,12 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   const monthlySalary = pos?.baseSalary ?? profile.monthlySalary ?? 0;
   const mealAllowance = pos?.mealAllowance ?? profile.mealAllowance ?? 0;
   const FULL_ATTENDANCE_BONUS = 2000;
+  const STANDARD_MINS = 8 * 60;        // 480 分鐘標準工時
+  const OT_UNIT = 10;                   // 每 10 分鐘為一個加班單位
+  const OT_RATE_1 = 1.34;              // 加班前 2h 倍率
+  const OT_RATE_2 = 1.67;              // 加班 2h 後倍率
+  // 月薪員工時薪 = 底薪 ÷ 30天 ÷ 8小時
+  const impliedHourlyRate = monthlySalary / 30 / 8;
 
   const dailyBase = monthlySalary / 30;
   const dailyMeal = mealAllowance / 30;
@@ -128,11 +134,28 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
 
       const dayBaseSalary = dailyBase + dailyMeal;
 
-      // ✅ Bug Fix: 只有實際有工作時間（或仍在打卡中）的日期才算出勤，
-      // 防止「上班下班同秒」的無效打卡被計入薪資天數
+      // 加班計算：超過 8 小時的部分，以 10 分鐘為單位
+      let dayOvertimeMins = 0;
+      let dayOvertimePay = 0;
+      if (dayMinutes > STANDARD_MINS) {
+        const rawOtMins = dayMinutes - STANDARD_MINS;
+        // 無條件捨去至 10 分鐘單位
+        const otMins = Math.floor(rawOtMins / OT_UNIT) * OT_UNIT;
+        if (otMins > 0) {
+          const ot1Mins = Math.min(otMins, 120);           // 前 2h
+          const ot2Mins = Math.max(0, otMins - 120);       // 2h 後
+          dayOvertimePay =
+            (ot1Mins * impliedHourlyRate * OT_RATE_1) / 60 +
+            (ot2Mins * impliedHourlyRate * OT_RATE_2) / 60;
+          dayOvertimeMins = otMins;
+        }
+      }
+      totalOvertimeMinutes += dayOvertimeMins;
+
+      // ✅ 只有實際有工作時間（或仍在打卡中）的日期才算出勤
       if (ins.length > 0 && (dayMinutes > 0 || isClockedIn)) {
         attendedDays++;
-        totalSalary += dayBaseSalary;
+        totalSalary += dayBaseSalary + dayOvertimePay;
       }
 
       dailyRecords.push({
@@ -140,8 +163,9 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
         inTime: ins[0]?.timestamp?.toDate() ? format(ins[0].timestamp.toDate(), 'HH:mm') : null,
         outTime: outs[outs.length - 1]?.timestamp?.toDate() ? format(outs[outs.length - 1].timestamp.toDate(), 'HH:mm') : null,
         hours: dayMinutes > 0 ? dayMinutes / 60 : 0,
-        overtimeHours: 0,
-        salary: dayBaseSalary,
+        overtimeHours: dayOvertimeMins / 60,
+        overtimePay: Math.round(dayOvertimePay),
+        salary: dayBaseSalary + dayOvertimePay,
         lateMinutes: dayLate,
         shiftId: ins[0]?.shiftId || '',
         missedPunch: ins.length !== outs.length && !isClockedIn,
@@ -181,12 +205,18 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   const hasFullAttendance = !hasLate && !hasLeave && !hasMissedPunch && !hasAbsent;
   const fullAttendancePay = hasFullAttendance ? FULL_ATTENDANCE_BONUS : 0;
 
+  const overtimePay = Math.round(
+    dailyRecords.reduce((sum, r) => sum + (r.overtimePay || 0), 0)
+  );
+
   const salaryBreakdown = {
     attendedDays,
     dailyBase,
     dailyMeal,
     basePay: Math.round(dailyBase * attendedDays),
     mealPay: Math.round(dailyMeal * attendedDays),
+    overtimePay,                          // 月薪加班費
+    impliedHourlyRate: Math.round(impliedHourlyRate), // 換算時薪（底薪÷30÷8）
     fullAttendancePay,
     hasFullAttendance,
     hasLate,
@@ -201,7 +231,7 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   return {
     dailyRecords,
     totalHours: totalMinutes / 60,
-    totalOvertimeHours: 0,
+    totalOvertimeHours: totalOvertimeMinutes / 60,
     totalSalary: totalSalary + fullAttendancePay,
     salaryBreakdown,
   };
