@@ -16,7 +16,7 @@ import { differenceInMinutes, format } from 'date-fns';
  * @param {Object} profile  - Firestore user profile
  * @param {Array}  leaves   - 當月請假紀錄（可選）
  */
-export function calcSalaryFromPunches(punches, profile, leaves = []) {
+export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAssignments = {}, month = null) {
   if (!punches?.length || !profile) {
     return { dailyRecords: [], totalHours: 0, totalSalary: 0, totalOvertimeHours: 0, salaryBreakdown: null };
   }
@@ -151,7 +151,34 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
   const approvedLeaves = leaves.filter(l => l.status === 'approved');
   // ✅ 全勤只受病假、事假影響；特休、婚假、喪假不扣全勤
   const hasLeave = approvedLeaves.some(l => l.type === "病假" || l.type === "事假");
-  const hasFullAttendance = !hasLate && !hasLeave && !hasMissedPunch;
+
+  // ✅ 排班驗證：取得本月所有排班日，檢查是否有缺勤（有排班但無打卡）
+  const empId = profile.id || profile.uid || '';
+  const monthPrefix = month || (Object.keys(byDate)[0] || '').slice(0, 7);
+  const scheduledDates = Object.keys(scheduleAssignments)
+    .filter(key => key.startsWith(`${empId}_${monthPrefix}`))
+    .map(key => key.replace(`${empId}_`, ''));
+  const hasAbsent = scheduledDates.some(date => {
+    const dayPunches = byDate[date] || [];
+    const ins = dayPunches.filter(p => p.type === 'in');
+    const outs = dayPunches.filter(p => p.type === 'out');
+    const pairs = Math.min(ins.length, outs.length);
+    const isClockedIn = ins.length > outs.length;
+    let dayMinutes = 0;
+    for (let i = 0; i < pairs; i++) {
+      const diff = differenceInMinutes(outs[i].timestamp.toDate(), ins[i].timestamp.toDate());
+      if (diff > 0) dayMinutes += diff;
+    }
+    // 有排班但沒有有效打卡 = 缺勤
+    return ins.length === 0 || (!isClockedIn && dayMinutes === 0);
+  });
+
+  // 全勤獎金：管理員月底手動結算，條件達成即發放
+  const now = new Date();
+  const [sy, sm] = monthPrefix.split('-').map(Number);
+  const isCurrentMonth = !isNaN(sy) && now.getFullYear() === sy && (now.getMonth() + 1) === sm;
+
+  const hasFullAttendance = !hasLate && !hasLeave && !hasMissedPunch && !hasAbsent;
   const fullAttendancePay = hasFullAttendance ? FULL_ATTENDANCE_BONUS : 0;
 
   const salaryBreakdown = {
@@ -165,6 +192,9 @@ export function calcSalaryFromPunches(punches, profile, leaves = []) {
     hasLate,
     hasLeave,
     hasMissedPunch,
+    hasAbsent,
+    isCurrentMonth,
+    scheduledDays: scheduledDates.length,
     bonus: 0,
   };
 
