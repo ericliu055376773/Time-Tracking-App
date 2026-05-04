@@ -408,9 +408,9 @@ export default function AdminDashboard() {
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && (() => {
           switch(activeTab) {
-            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} />;
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} />;
             case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
-            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} />;
             case '請假審核': return <LeaveManager isAdmin={true} />;
             case 'WiFi 設定': return <WifiSettings />;
             case '職位薪資': return <PositionManager />;
@@ -546,7 +546,7 @@ export default function AdminDashboard() {
   );
 }
 
-function SalaryTab({ summaries, month, positions }) {
+function SalaryTab({ summaries, month, positions, scheduleAssignments }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
     <div className="table-wrapper">
@@ -1005,7 +1005,7 @@ const labelStyle = {
 };
 
 // ── 員工查詢 Tab ─────────────────────────────────────────────
-function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions }) {
+function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const emp = employees.find(e => e.id === queryEmpId);
   const punches = allPunches.filter(p => p.uid === queryEmpId);
@@ -1290,4 +1290,3 @@ function SystemSettings() {
     </div>
   );
 }
-
