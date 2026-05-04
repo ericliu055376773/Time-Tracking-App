@@ -1091,6 +1091,16 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
             )}
           </div>
 
+          {/* 薪資單列印 */}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <SalaryReport
+              employee={{ ...emp, _position: posMap[emp.positionId] || null }}
+              punches={allPunches.filter(p => p.uid === queryEmpId)}
+              leaves={allLeaves.filter(l => l.uid === queryEmpId)}
+              month={selectedMonth}
+            />
+          </div>
+
           {/* 打卡紀錄 */}
           <div className="card">
             <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14, letterSpacing: '0.08em' }}>打卡紀錄 — {selectedMonth}</div>
