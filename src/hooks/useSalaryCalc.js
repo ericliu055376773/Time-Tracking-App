@@ -151,6 +151,8 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
       // 加班計算：超過 8 小時的部分，以 10 分鐘為單位
       let dayOvertimeMins = 0;
       let dayOvertimePay = 0;
+      let dayOt1Mins = 0;
+      let dayOt2Mins = 0;
       if (dayMinutes > STANDARD_MINS) {
         const rawOtMins = dayMinutes - STANDARD_MINS;
         // 無條件捨去至 10 分鐘單位
@@ -162,15 +164,15 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
             (ot1Mins * impliedHourlyRate * OT_RATE_1) / 60 +
             (ot2Mins * impliedHourlyRate * OT_RATE_2) / 60;
           dayOvertimeMins = otMins;
+          dayOt1Mins = ot1Mins;
+          dayOt2Mins = ot2Mins;
         }
       }
       totalOvertimeMinutes += dayOvertimeMins;
 
       // ✅ 月薪制：有完整上下班打卡對（pairs > 0）就算出勤一天
-      // isClockedIn（只有上班無下班）pairs = 0，不計入出勤
       if (pairs > 0) {
         attendedDays++;
-        // 底薪和餐費為固定全額，加班費才逐日累計
         totalSalary += dayOvertimePay;
       }
 
@@ -180,6 +182,9 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
         outTime: outs[outs.length - 1]?.timestamp?.toDate() ? format(outs[outs.length - 1].timestamp.toDate(), 'HH:mm') : null,
         hours: dayMinutes > 0 ? dayMinutes / 60 : 0,
         overtimeHours: dayOvertimeMins / 60,
+        overtimeMins: dayOvertimeMins,
+        ot1Mins: dayOt1Mins,
+        ot2Mins: dayOt2Mins,
         overtimePay: Math.round(dayOvertimePay),
         salary: dayBaseSalary + dayOvertimePay,
         lateMinutes: dayLate,
@@ -241,6 +246,9 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   const overtimePay = Math.round(
     dailyRecords.reduce((sum, r) => sum + (r.overtimePay || 0), 0)
   );
+  const totalOt1Mins = dailyRecords.reduce((sum, r) => sum + (r.ot1Mins || 0), 0);
+  const totalOt2Mins = dailyRecords.reduce((sum, r) => sum + (r.ot2Mins || 0), 0);
+  const totalOtMins  = dailyRecords.reduce((sum, r) => sum + (r.overtimeMins || 0), 0);
 
   const salaryBreakdown = {
     attendedDays,
@@ -255,7 +263,10 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
     personalDeduction,                     // 事假扣款
     sickDeduction,                         // 病假扣款
     leaveDeduction,                        // 合計請假扣款
-    overtimePay,                          // 月薪加班費
+    overtimePay,
+    totalOtMins,
+    totalOt1Mins,   // 前2h加班分鐘數
+    totalOt2Mins,   // 2h後加班分鐘數
     impliedHourlyRate: Math.round(impliedHourlyRate), // 換算時薪（底薪÷工作天數÷8）
     fullAttendancePay,
     hasFullAttendance,
