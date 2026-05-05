@@ -32,6 +32,7 @@ export default function EmployeeDashboard() {
   const [shiftWarning, setShiftWarning] = useState('');
   const [salaryRevealDay, setSalaryRevealDay] = useState(30);
   const [punchCutoffMinutes, setPunchCutoffMinutes] = useState(30);
+  const [earlyClockInMinutes, setEarlyClockInMinutes] = useState(15);
   const [confirmPunch, setConfirmPunch] = useState(null); // { type, label, time, lateMin, validation }
 
   useEffect(() => {
@@ -63,6 +64,10 @@ export default function EmployeeDashboard() {
         if (snap.exists()) {
           if (snap.data().salaryRevealDay) setSalaryRevealDay(snap.data().salaryRevealDay);
           if (snap.data().punchCutoffMinutes !== undefined) setPunchCutoffMinutes(snap.data().punchCutoffMinutes);
+        }
+        const punchSnap = await getDoc(doc(db, 'settings', 'punchSettings'));
+        if (punchSnap.exists() && punchSnap.data().earlyClockInMinutes !== undefined) {
+          setEarlyClockInMinutes(punchSnap.data().earlyClockInMinutes);
         }
       } catch {}
     }
@@ -156,8 +161,8 @@ export default function EmployeeDashboard() {
     const endMins = eh * 60 + em;
 
     if (type === 'in') {
-      if (nowMins < startMins - 15) {
-        return { ok: false, msg: `距離可打卡時間還有 ${startMins - 15 - nowMins} 分鐘（${shift.name || shift.id}班 ${shift.start} 上班）` };
+      if (nowMins < startMins - earlyClockInMinutes) {
+        return { ok: false, msg: `距離可打卡時間還有 ${startMins - earlyClockInMinutes - nowMins} 分鐘（${shift.name || shift.id}班 ${shift.start} 上班）` };
       }
       if (nowMins > endMins) return { ok: false, msg: `已超過 ${shift.name || shift.id}班 下班時間（${shift.end}），如需補打請聯繫管理員` };
       // 方案三：打卡截止時間鎖定
