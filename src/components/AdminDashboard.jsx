@@ -1020,7 +1020,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
   const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
   const empWithPos2 = emp ? { ...emp, _position: posMap[emp.positionId] || null } : null;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
-    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, salaryRules.maxMissedPunchForFullAtt ?? 0)
+    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch)
     : { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
 
   const leaveDeduction = emp?.payType === 'hourly'
