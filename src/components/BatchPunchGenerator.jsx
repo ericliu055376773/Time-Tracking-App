@@ -39,6 +39,7 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
   const [lateMinutes, setLateMinutes] = useState(0);   // 遲到幾分鐘（0=準時）
   const [lateDays, setLateDays]       = useState([]);  // 哪幾天遲到（日期 'MM-DD'）
   const [missedDays, setMissedDays]   = useState([]);  // 忘打下班卡的日期
+  const [leaveDays, setLeaveDays]     = useState([]); // [{ day: '5', type: '事假' }]
   const [clearFirst, setClearFirst]   = useState(true);
   const [generating, setGenerating]   = useState(false);
   const [preview, setPreview]         = useState([]);
@@ -65,13 +66,16 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
       const inDt  = new Date(`${dateStr}T${String(ih).padStart(2,'0')}:${String(im + actualLate).padStart(2,'0')}:00`);
       const outDt = new Date(`${dateStr}T${String(oh).padStart(2,'0')}:${String(om).padStart(2,'0')}:00`);
 
+      const leaveEntry = leaveDays.find(l => l.day === String(d));
       records.push({
         date: dateStr, dow,
-        inTime: format(inDt, 'HH:mm'),
-        outTime: isMissed ? null : format(outDt, 'HH:mm'),
-        inDt, outDt: isMissed ? null : outDt,
-        lateMinutes: actualLate,
-        isMissed,
+        inTime: leaveEntry ? null : format(inDt, 'HH:mm'),
+        outTime: leaveEntry ? null : (isMissed ? null : format(outDt, 'HH:mm')),
+        inDt: leaveEntry ? null : inDt,
+        outDt: leaveEntry ? null : (isMissed ? null : outDt),
+        lateMinutes: leaveEntry ? 0 : actualLate,
+        isMissed: leaveEntry ? false : isMissed,
+        leaveType: leaveEntry?.type || null,
       });
     }
     return records;
@@ -99,11 +103,34 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
           return date >= `${month}-01` && date <= `${month}-31`;
         });
         await Promise.all(toDelete.map(d => deleteDoc(doc(db, 'punches', d.id))));
+        // 同時清除該月模擬請假
+        const leaveSnap = await getDocs(query(collection(db, 'leaves'), where('uid', '==', empId)));
+        const leavesToDel = leaveSnap.docs.filter(d => {
+          const date = d.data().date || '';
+          return date >= `${month}-01` && date <= `${month}-31` && d.data().reason === '批量模擬請假';
+        });
+        await Promise.all(leavesToDel.map(d => deleteDoc(doc(db, 'leaves', d.id))));
       }
 
       // 批量寫入
       let written = 0;
       for (const r of preview) {
+        // 請假日：寫入 leaves collection，不產生打卡
+        if (r.leaveType) {
+          await addDoc(collection(db, 'leaves'), {
+            uid: empId,
+            userName: emp?.name || '',
+            type: r.leaveType,
+            date: r.date,
+            days: 1,
+            status: 'approved',
+            reason: '批量模擬請假',
+            createdAt: Timestamp.fromDate(new Date()),
+          });
+          written++;
+          continue;
+        }
+
         // 上班打卡
         await addDoc(collection(db, 'punches'), {
           uid: empId,
@@ -292,6 +319,51 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
               )}
             </div>
 
+            {/* 請假設定 */}
+            <div style={card}>
+              <span style={label}>請假設定（哪幾號請事假/病假）</span>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                {Array.from({ length: daysInMonth }, (_, i) => i + 1).map(d => {
+                  const dateStr = `${month}-${String(d).padStart(2,'0')}`;
+                  const dow = new Date(dateStr).getDay();
+                  if (!workDays.includes(dow)) return null;
+                  const entry = leaveDays.find(l => l.day === String(d));
+                  return (
+                    <div key={d} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                      <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{d}</span>
+                      <button
+                        onClick={() => {
+                          setLeaveDays(prev => {
+                            const exists = prev.find(l => l.day === String(d));
+                            if (!exists) return [...prev, { day: String(d), type: '事假' }];
+                            if (exists.type === '事假') return prev.map(l => l.day === String(d) ? { ...l, type: '病假' } : l);
+                            return prev.filter(l => l.day !== String(d));
+                          });
+                        }}
+                        style={{
+                          width: 36, height: 28, borderRadius: 6, fontSize: 10, fontWeight: 700,
+                          border: `1px solid ${entry ? (entry.type === '事假' ? 'var(--red)' : 'var(--amber)') : 'var(--border)'}`,
+                          background: entry ? (entry.type === '事假' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)') : 'var(--bg-elevated)',
+                          color: entry ? (entry.type === '事假' ? 'var(--red)' : 'var(--amber)') : 'var(--text-muted)',
+                          cursor: 'pointer',
+                        }}>
+                        {entry ? (entry.type === '事假' ? '事' : '病') : '—'}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                點一下 → 事假（紅）｜再點 → 病假（橘）｜再點 → 取消
+                {leaveDays.length > 0 && (
+                  <span style={{ marginLeft: 12, color: 'var(--red)' }}>
+                    事假 {leaveDays.filter(l=>l.type==='事假').length} 天，
+                    病假 {leaveDays.filter(l=>l.type==='病假').length} 天
+                  </span>
+                )}
+              </div>
+            </div>
+
             {/* 清除舊資料 */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <input type="checkbox" id="clearFirst" checked={clearFirst} onChange={e => setClearFirst(e.target.checked)}
@@ -337,8 +409,10 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
                           ? <span style={{ color: 'var(--amber)', fontWeight: 700 }}>+{r.lateMinutes}m</span>
                           : <span style={{ color: 'var(--text-muted)' }}>—</span>}
                       </td>
-                      <td style={{ padding: '8px 12px', fontSize: 11, color: 'var(--text-muted)' }}>
-                        {r.isMissed ? '⚠ 忘打下班' : ''}
+                      <td style={{ padding: '8px 12px', fontSize: 11 }}>
+                        {r.leaveType
+                          ? <span style={{ color: r.leaveType === '事假' ? 'var(--red)' : 'var(--amber)', fontWeight: 700 }}>📋 {r.leaveType}</span>
+                          : r.isMissed ? <span style={{ color: 'var(--text-muted)' }}>⚠ 忘打下班</span> : ''}
                       </td>
                     </tr>
                   ))}
