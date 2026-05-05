@@ -388,7 +388,12 @@ export default function SalaryReport({
                     { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()}（全額）`, amount: salaryBreakdown.mealPay, isDeduction: false },
                     ...(salaryBreakdown.personalDeduction > 0 ? [{ label: `事假扣款（${salaryBreakdown.personalLeaveDays}天）`, sub: `底薪 ÷ ${salaryBreakdown.workingDaysBase} × ${salaryBreakdown.personalLeaveDays} 天（底薪+餐費全扣）`, amount: -salaryBreakdown.personalDeduction, isDeduction: true }] : []),
                     ...(salaryBreakdown.sickDeduction > 0 ? [{ label: `病假扣款（${salaryBreakdown.sickLeaveDays}天）`, sub: `底薪半扣 + 餐費全扣，共 ${salaryBreakdown.sickLeaveDays} 天`, amount: -salaryBreakdown.sickDeduction, isDeduction: true }] : []),
-                    ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: `換算時薪 $${salaryBreakdown.impliedHourlyRate}/hr × 1.34（前2h）或 1.67（後段），10分鐘為單位`, amount: salaryBreakdown.overtimePay, isDeduction: false }] : []),
+                    ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: (() => {
+                      const { impliedHourlyRate: hr, totalOt1Mins: m1 = 0, totalOt2Mins: m2 = 0, totalOtMins: tm = 0 } = salaryBreakdown;
+                      const line1 = m1 > 0 ? `前2h：${m1}分 × $${hr} × 1.34 = $${Math.round(m1 * hr * 1.34 / 60)}` : '';
+                      const line2 = m2 > 0 ? `後段：${m2}分 × $${hr} × 1.67 = $${Math.round(m2 * hr * 1.67 / 60)}` : '';
+                      return `共 ${tm} 分鐘｜${[line1, line2].filter(Boolean).join('｜')}`;
+                    })(), amount: salaryBreakdown.overtimePay, isDeduction: false }] : []),
                     (() => {
                       const violations = [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡', salaryBreakdown.hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
                       const fullLabel = `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
