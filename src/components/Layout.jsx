@@ -13,7 +13,7 @@ const ADMIN_TABS = [
   { key: '請假審核',  icon: '📋' },
   { key: '員工管理',  icon: '👥' },
   { key: 'WiFi 設定', icon: '📡' },
-  { key: '系統設定',  icon: '⚙️' },
+  { key: '系統設定',  icon: '⚙️', children: ['一般設定', '打卡設定'] },
   { key: '月薪算法',  icon: '📐' },
   { key: '職位薪資',  icon: '🏷️' },
   { key: '班別設定',  icon: '⏰' },
