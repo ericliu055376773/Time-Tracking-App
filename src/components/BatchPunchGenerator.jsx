@@ -88,15 +88,17 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
     if (!empId || preview.length === 0) return;
     setGenerating(true);
     try {
-      // 清除舊資料
+      // 清除舊資料（只查 uid，日期過濾在記憶體做，不需要複合索引）
       if (clearFirst) {
         const snap = await getDocs(query(
           collection(db, 'punches'),
           where('uid', '==', empId),
-          where('date', '>=', `${month}-01`),
-          where('date', '<=', `${month}-31`),
         ));
-        await Promise.all(snap.docs.map(d => deleteDoc(doc(db, 'punches', d.id))));
+        const toDelete = snap.docs.filter(d => {
+          const date = d.data().date || '';
+          return date >= `${month}-01` && date <= `${month}-31`;
+        });
+        await Promise.all(toDelete.map(d => deleteDoc(doc(db, 'punches', d.id))));
       }
 
       // 批量寫入
