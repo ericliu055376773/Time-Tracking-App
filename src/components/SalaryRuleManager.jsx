@@ -23,6 +23,7 @@ const DEFAULT_RULES = {
   hourlyOTMinutes: 10,    // 時薪加班計算單位（分鐘）
   salaryRevealDay: 30,    // 薪資明細開放日（每月幾號）
   punchCutoffMinutes: 30,  // 上班打卡截止（班別開始後幾分鐘鎖定）
+  monthlyRestDays: 8,      // 每月休假天數（影響日薪基準，30-N=工作天數）
   maxMissedPunchForFullAtt: 0, // 全勤容許忘打卡次數（0 = 完全不容許）
 };
 
@@ -187,23 +188,20 @@ export default function SalaryRuleManager() {
         )}
       </DeductCard>
 
-      {/* 全勤忘打卡容許次數設定 */}
-      <DeductCard title="全勤容許忘打卡次數" prefix="⚠️" color="var(--amber)"
-        isEditing={editing.missedPunch} onToggleEdit={() => toggleEdit('missedPunch')}>
-        {editing.missedPunch ? (
+      {/* ── 月休天數設定 ── */}
+      <DeductCard title="每月休假天數" prefix="📅" color="var(--text-secondary)"
+        isEditing={editing.restDays} onToggleEdit={() => toggleEdit('restDays')}>
+        {editing.restDays ? (
           <EditRow>
-            <span style={muteTxt}>當月忘記打卡超過</span>
-            <NumInput value={rules.maxMissedPunchForFullAtt ?? 0} onChange={v => update('maxMissedPunchForFullAtt', Math.max(0, v))} width={70} />
-            <span style={muteTxt}>次則失去全勤（有補打卡不計次，0 = 完全不容許）</span>
+            <span style={muteTxt}>每月休假</span>
+            <NumInput value={rules.monthlyRestDays ?? 8} onChange={v => update('monthlyRestDays', Math.max(0, Math.min(20, v)))} width={70} />
+            <span style={muteTxt}>天（工作天數 = 30 - {rules.monthlyRestDays ?? 8} = {30 - (rules.monthlyRestDays ?? 8)} 天）</span>
           </EditRow>
         ) : (
           <DisplayRow>
-            <span style={muteTxt}>當月忘打卡超過</span>
-            <span style={whiteVal}>{rules.maxMissedPunchForFullAtt ?? 0}</span>
-            <span style={muteTxt}>次則失去全勤</span>
-            {(rules.maxMissedPunchForFullAtt ?? 0) === 0
-              ? <span style={{ fontSize: 11, color: 'var(--red)' }}>（任何一次未補打的忘打卡即失去全勤）</span>
-              : <span style={{ fontSize: 11, color: 'var(--amber)' }}>（有補打卡不計次，只計未修復的忘打卡）</span>}
+            <span style={muteTxt}>月休</span>
+            <span style={whiteVal}>{rules.monthlyRestDays ?? 8}</span>
+            <span style={muteTxt}>天 → 工作天數 {30 - (rules.monthlyRestDays ?? 8)} 天 → 日薪基準 ÷ {30 - (rules.monthlyRestDays ?? 8)}</span>
           </DisplayRow>
         )}
       </DeductCard>
