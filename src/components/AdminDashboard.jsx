@@ -87,7 +87,7 @@ export default function AdminDashboard() {
     const punches = allPunches.filter(p => p.uid === emp.id);
     const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved');
     const empWithPos = { ...emp, _position: posMap2[emp.positionId] || null };
-    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, salaryRules.maxMissedPunchForFullAtt ?? 0);
+    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules);
     const pos2 = posMap2[emp.positionId];
     const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
     const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
@@ -420,9 +420,9 @@ export default function AdminDashboard() {
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && (() => {
           switch(activeTab) {
-            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} />;
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} />;
             case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
-            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} />;
             case '請假審核': return <LeaveManager isAdmin={true} />;
             case 'WiFi 設定': return <WifiSettings />;
             case '職位薪資': return <PositionManager />;
@@ -567,7 +567,7 @@ export default function AdminDashboard() {
   );
 }
 
-function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0 }) {
+function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {} }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   return (
     <div className="table-wrapper">
@@ -588,7 +588,7 @@ function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissed
               <td style={{ fontFamily: 'var(--mono)', color: emp.totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{emp.totalOvertimeHours > 0 ? fmtHours(emp.totalOvertimeHours) : '--'}</td>
               <td style={{ fontFamily: 'var(--mono)', color: emp.leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{emp.leaveDeduction > 0 ? `-${fmtMoney(emp.leaveDeduction)}` : '--'}</td>
               <td style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: emp.netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(emp.netSalary)}</td>
-              <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} /></td>
+              <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} salaryRules={salaryRules} /></td>
             </tr>
           ))}
         </tbody>
@@ -1026,14 +1026,14 @@ const labelStyle = {
 };
 
 // ── 員工查詢 Tab ─────────────────────────────────────────────
-function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0 }) {
+function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {} }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const emp = employees.find(e => e.id === queryEmpId);
   const punches = allPunches.filter(p => p.uid === queryEmpId);
   const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
   const empWithPos2 = emp ? { ...emp, _position: posMap[emp.positionId] || null } : null;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
-    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch)
+    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch, salaryRules)
     : { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
 
   const leaveDeduction = emp?.payType === 'hourly'
@@ -1103,8 +1103,10 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
                     ? '達成全勤條件'
                     : [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', missedLabel, hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
                   return [
-                    { label: '底薪', sub: `$${displayBase.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.basePay) },
-                    { label: '餐費', sub: `$${displayMeal.toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, value: fmtMoney(salaryBreakdown.mealPay) },
+                    { label: '底薪', sub: `$${displayBase.toLocaleString()}（全額，月休 ${salaryBreakdown.monthlyRestDays} 天）`, value: fmtMoney(salaryBreakdown.basePay) },
+                    { label: '餐費', sub: `$${displayMeal.toLocaleString()}（全額）`, value: fmtMoney(salaryBreakdown.mealPay) },
+                    ...(salaryBreakdown.personalDeduction > 0 ? [{ label: `事假扣款（${salaryBreakdown.personalLeaveDays}天）`, sub: `$${displayBase.toLocaleString()} ÷ ${salaryBreakdown.workingDaysBase} × ${salaryBreakdown.personalLeaveDays} 天`, value: `-${fmtMoney(salaryBreakdown.personalDeduction)}`, negative: true }] : []),
+                    ...(salaryBreakdown.sickDeduction > 0 ? [{ label: `病假扣款（${salaryBreakdown.sickLeaveDays}天）`, sub: `底薪半扣 + 餐費全扣，共 ${salaryBreakdown.sickLeaveDays} 天`, value: `-${fmtMoney(salaryBreakdown.sickDeduction)}`, negative: true }] : []),
                     ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: `換算時薪 $${salaryBreakdown.impliedHourlyRate}/hr（超過 8h，10分鐘為單位）`, value: fmtMoney(salaryBreakdown.overtimePay) }] : []),
                     { label: fullLabel, sub: fullSub, value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
                     { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
@@ -1139,6 +1141,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
               month={selectedMonth}
               scheduleAssignments={scheduleAssignments}
               maxMissedPunch={maxMissedPunch}
+              salaryRules={salaryRules}
             />
           </div>
 
