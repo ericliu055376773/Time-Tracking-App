@@ -17,6 +17,7 @@ import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import PositionManager from './PositionManager';
 import SalaryRuleManager from './SalaryRuleManager';
+import PunchSettings from './PunchSettings';
 import AnnualLeaveManager from './AnnualLeaveManager';
 const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
@@ -45,6 +46,7 @@ export default function AdminDashboard() {
   const [makePunchError, setMakePunchError] = useState('');
   const [scheduleAssignments, setScheduleAssignments] = useState({});
   const [salaryRules, setSalaryRules] = useState({});
+  const [punchSettings, setPunchSettings] = useState({});
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -70,6 +72,8 @@ export default function AdminDashboard() {
       setScheduleAssignments(schedSnap.exists() ? (schedSnap.data().assignments || {}) : {});
       const rulesSnap = await getDoc(doc(db, 'settings', 'salaryRules'));
       setSalaryRules(rulesSnap.exists() ? rulesSnap.data() : {});
+      const punchSnap = await getDoc(doc(db, 'settings', 'punchSettings'));
+      setPunchSettings(punchSnap.exists() ? punchSnap.data() : {});
     } catch (err) { console.error(err); }
     setLoading(false);
   }, [selectedMonth]);
@@ -411,14 +415,15 @@ export default function AdminDashboard() {
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && (() => {
           switch(activeTab) {
-            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={salaryRules.maxMissedPunchForFullAtt ?? 0} />;
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} />;
             case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
-            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={salaryRules.maxMissedPunchForFullAtt ?? 0} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} />;
             case '請假審核': return <LeaveManager isAdmin={true} />;
             case 'WiFi 設定': return <WifiSettings />;
             case '職位薪資': return <PositionManager />;
             case '班別設定': return <ShiftManager />;
-            case '系統設定': return <SystemSettings />;
+            case '一般設定': return <SystemSettings />;
+            case '打卡設定': return <PunchSettings onSaved={fetchAll} />;
             case '月薪算法': return <SalaryRuleManager />;
             case '排班管理': return <ScheduleManager />;
             case '特休天數': return <AnnualLeaveManager subTab="特休天數" />;
