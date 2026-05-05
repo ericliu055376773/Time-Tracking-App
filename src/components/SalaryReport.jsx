@@ -16,6 +16,7 @@ export default function SalaryReport({
   month,
   scheduleAssignments = {},
   maxMissedPunch = 0,
+  salaryRules = {},
 }) {
   const printRef = useRef(null);
   const [showReport, setShowReport] = useState(false);
@@ -31,7 +32,7 @@ export default function SalaryReport({
   let calcResult = { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
   let calcError = null;
   try {
-    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch);
+    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch, salaryRules);
   } catch (err) {
     calcError = err.message;
     console.error('SalaryReport calcError:', err);
@@ -383,8 +384,10 @@ export default function SalaryReport({
                 // ── 月薪制明細 ──────────────────────────────
                 <>
                   {[
-                    { label: '底薪', sub: `$${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.basePay, isDeduction: false },
-                    { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()} ÷ 30 × ${salaryBreakdown.attendedDays} 天`, amount: salaryBreakdown.mealPay, isDeduction: false },
+                    { label: '底薪', sub: `$${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()}（全額，月休 ${salaryBreakdown.monthlyRestDays ?? 8} 天）`, amount: salaryBreakdown.basePay, isDeduction: false },
+                    { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()}（全額）`, amount: salaryBreakdown.mealPay, isDeduction: false },
+                    ...(salaryBreakdown.personalDeduction > 0 ? [{ label: `事假扣款（${salaryBreakdown.personalLeaveDays}天）`, sub: `底薪 ÷ ${salaryBreakdown.workingDaysBase} × ${salaryBreakdown.personalLeaveDays} 天（底薪+餐費全扣）`, amount: -salaryBreakdown.personalDeduction, isDeduction: true }] : []),
+                    ...(salaryBreakdown.sickDeduction > 0 ? [{ label: `病假扣款（${salaryBreakdown.sickLeaveDays}天）`, sub: `底薪半扣 + 餐費全扣，共 ${salaryBreakdown.sickLeaveDays} 天`, amount: -salaryBreakdown.sickDeduction, isDeduction: true }] : []),
                     ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: `換算時薪 $${salaryBreakdown.impliedHourlyRate}/hr × 1.34（前2h）或 1.67（後段），10分鐘為單位`, amount: salaryBreakdown.overtimePay, isDeduction: false }] : []),
                     (() => {
                       const violations = [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡', salaryBreakdown.hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
