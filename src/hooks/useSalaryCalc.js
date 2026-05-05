@@ -8,7 +8,7 @@
 //
 // 時薪制：依實際工時 × 時薪計算（含加班費）
 
-import { differenceInMinutes, format } from 'date-fns';
+import { differenceInMinutes, format, getDaysInMonth, parseISO } from 'date-fns';
 
 /**
  * 從打卡紀錄計算每日工時與薪資
@@ -16,7 +16,7 @@ import { differenceInMinutes, format } from 'date-fns';
  * @param {Object} profile  - Firestore user profile
  * @param {Array}  leaves   - 當月請假紀錄（可選）
  */
-export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAssignments = {}, month = null) {
+export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAssignments = {}, month = null, maxMissedPunchForFullAtt = 0, salaryRules = {}) {
   if (!punches?.length || !profile) {
     return { dailyRecords: [], totalHours: 0, totalSalary: 0, totalOvertimeHours: 0, salaryBreakdown: null };
   }
@@ -91,19 +91,29 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   const monthlySalary = pos?.baseSalary ?? profile.monthlySalary ?? 0;
   const mealAllowance = pos?.mealAllowance ?? profile.mealAllowance ?? 0;
   const FULL_ATTENDANCE_BONUS = 2000;
-  const STANDARD_MINS = 8 * 60;        // 480 分鐘標準工時
-  const OT_UNIT = 10;                   // 每 10 分鐘為一個加班單位
-  const OT_RATE_1 = 1.34;              // 加班前 2h 倍率
-  const OT_RATE_2 = 1.67;              // 加班 2h 後倍率
-  // 月薪員工時薪 = 底薪 ÷ 30天 ÷ 8小時
-  const impliedHourlyRate = monthlySalary / 30 / 8;
+  const STANDARD_MINS = 8 * 60;
+  const OT_UNIT = 10;
+  const OT_RATE_1 = 1.34;
+  const OT_RATE_2 = 1.67;
 
-  const dailyBase = monthlySalary / 30;
-  const dailyMeal = mealAllowance / 30;
+  // 日薪基準 = 底薪 ÷ 行政院當月總天數（5月=31天、4月=30天）
+  const monthPrefix2 = month || (Object.keys(byDate)[0] || '').slice(0, 7);
+  const daysInThisMonth = monthPrefix2
+    ? getDaysInMonth(parseISO(monthPrefix2 + '-01'))
+    : 30;
+
+  // 月薪員工時薪 = 底薪 ÷ 當月天數 ÷ 8小時（用於加班費計算）
+  const impliedHourlyRate = monthlySalary / daysInThisMonth / 8;
+
+  // 日薪基準（用於請假扣款，依當月實際天數）
+  const dailyBase = monthlySalary / daysInThisMonth;
+  const dailyMeal = mealAllowance / daysInThisMonth;
+  const workingDaysBase = daysInThisMonth;  // 供顯示用
+  const monthlyRestDays = null;             // 不再使用
 
   let attendedDays = 0;
   let hasLate = false;
-  let hasMissedPunch = false;
+  let missedPunchCount = 0;  // 未補打的忘打卡次數
 
   Object.entries(byDate)
     .sort(([a], [b]) => a.localeCompare(b))
@@ -118,7 +128,11 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
       // 清除遲到紀錄且不算忘打卡，員工仍可獲得全勤獎金
       const hasMakeup = dayPunches.some(p => p.isMakeup === true);
 
-      if (!hasMakeup && ins.length !== outs.length && !isClockedIn) hasMissedPunch = true;
+      if (!hasMakeup && ins.length !== outs.length && !isClockedIn) {
+        // 未補打且有不成對的打卡 = 忘打卡未處理，計入次數
+        missedPunchCount++;
+      }
+      // hasMakeup = 管理員已補打，視為處理完畢，不計次數
 
       const dayLate = hasMakeup
         ? 0  // 補打卡日：遲到歸零
@@ -152,10 +166,12 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
       }
       totalOvertimeMinutes += dayOvertimeMins;
 
-      // ✅ 只有實際有工作時間（或仍在打卡中）的日期才算出勤
-      if (ins.length > 0 && (dayMinutes > 0 || isClockedIn)) {
+      // ✅ 月薪制：有完整上下班打卡對（pairs > 0）就算出勤一天
+      // isClockedIn（只有上班無下班）pairs = 0，不計入出勤
+      if (pairs > 0) {
         attendedDays++;
-        totalSalary += dayBaseSalary + dayOvertimePay;
+        // 底薪和餐費為固定全額，加班費才逐日累計
+        totalSalary += dayOvertimePay;
       }
 
       dailyRecords.push({
@@ -176,13 +192,26 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   // ✅ 全勤只受病假、事假影響；特休、婚假、喪假不扣全勤
   const hasLeave = approvedLeaves.some(l => l.type === "病假" || l.type === "事假");
 
+  // ── 月薪固定全額，僅事假/病假扣款，特休不扣 ──────────────────
+  const personalLeaveDays = approvedLeaves.filter(l => l.type === '事假').length;
+  const sickLeaveDays     = approvedLeaves.filter(l => l.type === '病假').length;
+  // 事假：底薪全扣 + 餐費全扣
+  const personalDeduction = Math.round((dailyBase + dailyMeal) * personalLeaveDays);
+  // 病假：底薪半扣 + 餐費全扣
+  const sickDeduction     = Math.round((dailyBase * 0.5 + dailyMeal) * sickLeaveDays);
+  const leaveDeduction    = personalDeduction + sickDeduction;
+
+  // 底薪全額 + 餐費全額 - 請假扣款 + 加班費（overtime 已在 totalSalary 中累計）
+  totalSalary = monthlySalary + mealAllowance - leaveDeduction + totalSalary;
+
   // ✅ 排班驗證：取得本月所有排班日，檢查是否有缺勤（有排班但無打卡）
   const empId = profile.id || profile.uid || '';
   const monthPrefix = month || (Object.keys(byDate)[0] || '').slice(0, 7);
   const scheduledDates = Object.keys(scheduleAssignments)
     .filter(key => key.startsWith(`${empId}_${monthPrefix}`))
     .map(key => key.replace(`${empId}_`, ''));
-  const hasAbsent = scheduledDates.some(date => {
+  // 沒有設定排班 = 無法驗證出滿班次 = 視為缺勤，不發全勤
+  const hasAbsent = scheduledDates.length === 0 || scheduledDates.some(date => {
     const dayPunches = byDate[date] || [];
     const ins = dayPunches.filter(p => p.type === 'in');
     const outs = dayPunches.filter(p => p.type === 'out');
@@ -193,8 +222,10 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
       const diff = differenceInMinutes(outs[i].timestamp.toDate(), ins[i].timestamp.toDate());
       if (diff > 0) dayMinutes += diff;
     }
-    // 有排班但沒有有效打卡 = 缺勤
-    return ins.length === 0 || (!isClockedIn && dayMinutes === 0);
+    // 有排班但沒有完整的上下班打卡對 = 缺勤
+    // pairs = 0 包含：完全沒打卡、只打上班沒下班（isClockedIn）
+    const pairsCount = Math.min(ins.length, outs.length);
+    return pairsCount === 0;
   });
 
   // 全勤獎金：管理員月底手動結算，條件達成即發放
@@ -202,6 +233,8 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   const [sy, sm] = monthPrefix.split('-').map(Number);
   const isCurrentMonth = !isNaN(sy) && now.getFullYear() === sy && (now.getMonth() + 1) === sm;
 
+  // 未補打的忘打卡次數超過閾值才失去全勤；有補打卡 = 0次
+  const hasMissedPunch = missedPunchCount > maxMissedPunchForFullAtt;
   const hasFullAttendance = !hasLate && !hasLeave && !hasMissedPunch && !hasAbsent;
   const fullAttendancePay = hasFullAttendance ? FULL_ATTENDANCE_BONUS : 0;
 
@@ -213,15 +246,24 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
     attendedDays,
     dailyBase,
     dailyMeal,
-    basePay: Math.round(dailyBase * attendedDays),
-    mealPay: Math.round(dailyMeal * attendedDays),
+    workingDaysBase,                       // 月工作天數基準（30 - 月休天數）
+    monthlyRestDays,
+    basePay: monthlySalary,                // ✅ 固定全額底薪
+    mealPay: mealAllowance,                // ✅ 固定全額餐費
+    personalLeaveDays,                     // 事假天數
+    sickLeaveDays,                         // 病假天數
+    personalDeduction,                     // 事假扣款
+    sickDeduction,                         // 病假扣款
+    leaveDeduction,                        // 合計請假扣款
     overtimePay,                          // 月薪加班費
-    impliedHourlyRate: Math.round(impliedHourlyRate), // 換算時薪（底薪÷30÷8）
+    impliedHourlyRate: Math.round(impliedHourlyRate), // 換算時薪（底薪÷工作天數÷8）
     fullAttendancePay,
     hasFullAttendance,
     hasLate,
     hasLeave,
     hasMissedPunch,
+    missedPunchCount,
+    maxMissedPunchForFullAtt,
     hasAbsent,
     isCurrentMonth,
     scheduledDays: scheduledDates.length,
@@ -232,7 +274,7 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
     dailyRecords,
     totalHours: totalMinutes / 60,
     totalOvertimeHours: totalOvertimeMinutes / 60,
-    totalSalary: totalSalary + fullAttendancePay,
+    totalSalary: totalSalary + fullAttendancePay,  // 底薪+餐費-請假扣款+加班+全勤
     salaryBreakdown,
   };
 }
