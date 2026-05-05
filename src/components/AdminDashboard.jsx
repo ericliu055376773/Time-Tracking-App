@@ -1107,7 +1107,12 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
                     { label: '餐費', sub: `$${displayMeal.toLocaleString()}（全額）`, value: fmtMoney(salaryBreakdown.mealPay) },
                     ...(salaryBreakdown.personalDeduction > 0 ? [{ label: `事假扣款（${salaryBreakdown.personalLeaveDays}天）`, sub: `$${displayBase.toLocaleString()} ÷ ${salaryBreakdown.workingDaysBase} × ${salaryBreakdown.personalLeaveDays} 天`, value: `-${fmtMoney(salaryBreakdown.personalDeduction)}`, negative: true }] : []),
                     ...(salaryBreakdown.sickDeduction > 0 ? [{ label: `病假扣款（${salaryBreakdown.sickLeaveDays}天）`, sub: `底薪半扣 + 餐費全扣，共 ${salaryBreakdown.sickLeaveDays} 天`, value: `-${fmtMoney(salaryBreakdown.sickDeduction)}`, negative: true }] : []),
-                    ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: `換算時薪 $${salaryBreakdown.impliedHourlyRate}/hr（超過 8h，10分鐘為單位）`, value: fmtMoney(salaryBreakdown.overtimePay) }] : []),
+                    ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: (() => {
+                      const { impliedHourlyRate: hr, totalOt1Mins: m1, totalOt2Mins: m2, totalOtMins: tm } = salaryBreakdown;
+                      const line1 = m1 > 0 ? `前2h：${m1}分 × $${hr}/hr × 1.34 = $${Math.round(m1 * hr * 1.34 / 60)}` : '';
+                      const line2 = m2 > 0 ? `後段：${m2}分 × $${hr}/hr × 1.67 = $${Math.round(m2 * hr * 1.67 / 60)}` : '';
+                      return `共 ${tm} 分鐘（10分鐘為單位）｜${[line1, line2].filter(Boolean).join('｜')}`;
+                    })(), value: fmtMoney(salaryBreakdown.overtimePay) }] : []),
                     { label: fullLabel, sub: fullSub, value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
                     { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
                   ];
