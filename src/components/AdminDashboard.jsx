@@ -18,6 +18,7 @@ import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import PositionManager from './PositionManager';
 import SalaryRuleManager from './SalaryRuleManager';
 import PunchSettings from './PunchSettings';
+import BatchPunchGenerator from './BatchPunchGenerator';
 import AnnualLeaveManager from './AnnualLeaveManager';
 const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
@@ -47,6 +48,7 @@ export default function AdminDashboard() {
   const [scheduleAssignments, setScheduleAssignments] = useState({});
   const [salaryRules, setSalaryRules] = useState({});
   const [punchSettings, setPunchSettings] = useState({});
+  const [showBatchGen, setShowBatchGen] = useState(false);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -284,6 +286,9 @@ export default function AdminDashboard() {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <input type="month" value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)} style={{ width: 155, fontSize: 13 }} />
+          <button onClick={() => setShowBatchGen(true)} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+            🤖 模擬打卡
+          </button>
           <button onClick={() => { setMakePunchForm({ uid: '', date: '', time: '', type: 'in', shiftId: '', note: '' }); setMakePunchError(''); setShowMakePunch(true); }} style={{ padding: '9px 16px', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
             🕐 補打卡
           </button>
@@ -434,6 +439,14 @@ export default function AdminDashboard() {
           }
         })()}
       </div>
+
+      {showBatchGen && (
+        <BatchPunchGenerator
+          employees={employees}
+          onClose={() => { setShowBatchGen(false); fetchAll(); }}
+          onDone={() => fetchAll()}
+        />
+      )}
 
       {showMakePunch && (
         <Modal title="🕐 補打卡" onClose={() => setShowMakePunch(false)}>
