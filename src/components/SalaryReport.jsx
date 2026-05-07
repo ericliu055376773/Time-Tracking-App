@@ -393,7 +393,7 @@ export default function SalaryReport({
                       const parts = [];
                       if (m1 > 0) parts.push(`×1.34段：${m1}分 × $${hr} ÷ 60 × 1.34 = $${Math.round(m1 * hr * 1.34 / 60)}`);
                       if (m2 > 0) parts.push(`×1.67段：${m2}分 × $${hr} ÷ 60 × 1.67 = $${Math.round(m2 * hr * 1.67 / 60)}`);
-                      return `換算時薪 $${hr}/hr｜總加班 ${tm} 分鐘（10分鐘為單位）｜${parts.join('｜')}`;
+                      return `換算時薪 $${hr}/hr（底薪 ÷ 當月天數${salaryBreakdown.workingDaysBase}天 ÷ 8h）｜總加班 ${tm} 分鐘｜${parts.join('｜')}`;
                     })(), amount: salaryBreakdown.overtimePay, isDeduction: false }] : []),
                     (() => {
                       const violations = [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡', salaryBreakdown.hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
