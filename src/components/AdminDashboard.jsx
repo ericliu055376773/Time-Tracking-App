@@ -1112,7 +1112,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
                       const parts = [];
                       if (m1 > 0) parts.push(`×1.34段（每日超過8h前2h累計）：${m1}分 × $${hr} ÷ 60 × 1.34 = $${Math.round(m1 * hr * 1.34 / 60)}`);
                       if (m2 > 0) parts.push(`×1.67段（每日超過10h累計）：${m2}分 × $${hr} ÷ 60 × 1.67 = $${Math.round(m2 * hr * 1.67 / 60)}`);
-                      return `換算時薪 $${hr}/hr（底薪÷當月天數÷8h）｜總加班 ${tm} 分鐘｜${parts.join('｜')}`;
+                      return `換算時薪 $${hr}/hr（底薪 ÷ 當月天數${salaryBreakdown.workingDaysBase}天 ÷ 8h）｜總加班 ${tm} 分鐘｜${parts.join('｜')}`;
                     })(), value: fmtMoney(salaryBreakdown.overtimePay) }] : []),
                     { label: fullLabel, sub: fullSub, value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
                     { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
