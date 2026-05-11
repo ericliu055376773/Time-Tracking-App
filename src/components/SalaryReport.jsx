@@ -17,11 +17,26 @@ export default function SalaryReport({
   scheduleAssignments = {},
   maxMissedPunch = 0,
   salaryRules = {},
+  snapshot = null,  // 已結算快照，存在時顯示快照資料
 }) {
   const printRef = useRef(null);
   const [showReport, setShowReport] = useState(false);
 
   if (!employee || !month) return null;
+
+  // ── 快照模式：讀取已結算資料，唯讀 ──────────────────────────
+  if (snapshot && !showReport) {
+    return (
+      <button onClick={() => setShowReport(true)} style={{
+        padding: '6px 14px', background: 'rgba(34,197,94,0.12)',
+        color: 'var(--green)', border: '1px solid rgba(34,197,94,0.35)',
+        borderRadius: 6, fontSize: 12, fontWeight: 600,
+        display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer',
+      }}>
+        🔒 薪資單
+      </button>
+    );
+  }
 
   // 注入職位資料供薪資計算使用
   const empForCalc = employee._position
