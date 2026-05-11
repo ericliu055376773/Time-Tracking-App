@@ -735,4 +735,4 @@ function OTRow({ label, formula, result, color }) {
 }
 
 const muteTxt = { fontSize: 13, color: 'var(--text-muted)' };
-const whiteVal = { fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: '#ffffff' };
+const whiteVal = { fontFamily: 'var(--mono)', fontSize: 16, fontWeight: 700, color: 'var(--text-primary)' };
