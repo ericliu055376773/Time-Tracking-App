@@ -22,6 +22,7 @@ const DEFAULT_RULES = {
   monthlyOTMinutes: 10,   // 月薪加班計算單位（分鐘）
   hourlyOTMinutes: 10,    // 時薪加班計算單位（分鐘）
   salaryRevealDay: 30,    // 薪資明細開放日（每月幾號）
+  settlementDay: 31,      // 薪資結算日（每月幾號，0=不自動提醒）
   punchCutoffMinutes: 30,  // 上班打卡截止（班別開始後幾分鐘鎖定）
   monthlyRestDays: 8,      // 每月休假天數（影響日薪基準，30-N=工作天數）
   maxMissedPunchForFullAtt: 0, // 全勤容許忘打卡次數（0 = 完全不容許）
@@ -189,6 +190,24 @@ export default function SalaryRuleManager() {
       </DeductCard>
 
       {/* ── 月休天數設定 ── */}
+      {/* 結算日設定 */}
+      <DeductCard title="薪資結算日" prefix="📅" color="var(--green)"
+        isEditing={editing.settlement} onToggleEdit={() => toggleEdit('settlement')}>
+        {editing.settlement ? (
+          <EditRow>
+            <span style={muteTxt}>每月</span>
+            <NumInput value={rules.settlementDay ?? 31} onChange={v => update('settlementDay', Math.max(0, Math.min(31, v)))} width={70} />
+            <span style={muteTxt}>號為薪資結算日（0 = 不自動提醒）</span>
+          </EditRow>
+        ) : (
+          <DisplayRow>
+            <span style={muteTxt}>每月</span>
+            <span style={whiteVal}>{rules.settlementDay ?? 31}</span>
+            <span style={muteTxt}>號 — 當天後台首頁提醒紅利填寫狀況</span>
+          </DisplayRow>
+        )}
+      </DeductCard>
+
       <DeductCard title="每月休假天數" prefix="📅" color="var(--text-secondary)"
         isEditing={editing.restDays} onToggleEdit={() => toggleEdit('restDays')}>
         {editing.restDays ? (
