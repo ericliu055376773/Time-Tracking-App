@@ -50,6 +50,9 @@ export default function AdminDashboard() {
   const [punchSettings, setPunchSettings] = useState({});
   const [showBatchGen, setShowBatchGen] = useState(false);
   const [monthSnapshots, setMonthSnapshots] = useState({}); // empId → snapshot
+  const [bonuses, setBonuses] = useState({}); // empId → amount for selected month
+  const [showBonusPanel, setShowBonusPanel] = useState(false);
+  const [bonusInput, setBonusInput] = useState({}); // editing state
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -88,6 +91,11 @@ export default function AdminDashboard() {
       const map = {};
       snap.docs.forEach(d => { map[d.data().empId] = d.data(); });
       setMonthSnapshots(map);
+      // 同時載入紅利
+      const bSnap = await getDocs(query(collection(db, 'bonuses'), where('month', '==', selectedMonth)));
+      const bMap = {};
+      bSnap.docs.forEach(d => { bMap[d.data().empId] = d.data().amount ?? 0; });
+      setBonuses(bMap);
     } catch (err) { console.error('fetchSnapshots error:', err); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth]);
@@ -109,6 +117,7 @@ export default function AdminDashboard() {
       for (const emp of salarySummaries) {
         const pos = posMap2[emp.positionId];
         const docId = `${emp.id}_${selectedMonth}`;
+        const bonusAmount = bonuses[emp.id] ?? 0;
         await setDoc(doc(db, 'salarySnapshots', docId), {
           empId: emp.id,
           empName: emp.name,
@@ -123,6 +132,8 @@ export default function AdminDashboard() {
           totalOvertimeHours: emp.totalOvertimeHours || 0,
           netSalary: emp.netSalary || 0,
           leaveDeduction: emp.leaveDeduction || 0,
+          bonus: bonusAmount,
+          totalWithBonus: (emp.netSalary || 0) + bonusAmount,
           ...(emp.salaryBreakdown ? {
             attendedDays: emp.salaryBreakdown.attendedDays,
             basePay: emp.salaryBreakdown.basePay,
@@ -487,6 +498,77 @@ export default function AdminDashboard() {
               fontSize: 13, fontWeight: 700, padding: '3px 12px', flexShrink: 0,
             }}>{noHiredAtEmps.length}</div>
           </button>
+        </div>
+      )}
+
+      {/* 結算日紅利提醒通知 */}
+      {(() => {
+        const today = new Date();
+        const settlementDay = salaryRules.settlementDay ?? 31;
+        if (settlementDay === 0) return null;
+        if (today.getDate() < settlementDay) return null;
+        const monthlyEmps = employees.filter(e => e.payType === 'monthly' || e.payType !== 'hourly');
+        const missingBonus = monthlyEmps.filter(e => bonuses[e.id] == null);
+        if (missingBonus.length === 0) return null;
+        return (
+          <div
+            onClick={() => { setBonusInput(Object.fromEntries(monthlyEmps.map(e => [e.id, bonuses[e.id] ?? '']))); setShowBonusPanel(true); }}
+            style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 20px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: 12, cursor: 'pointer', margin: '0 0 8px 0' }}>
+            <div style={{ fontSize: 24, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(245,158,11,0.15)', borderRadius: 8 }}>💰</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--amber)' }}>今天是薪資結算日（每月 {settlementDay} 號），以下員工紅利尚未填寫</div>
+              <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{missingBonus.map(e => e.name).join('、')} · 點擊填寫 →</div>
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 13, background: 'var(--amber)', color: '#fff', borderRadius: 20, padding: '3px 10px' }}>{missingBonus.length}</div>
+          </div>
+        );
+      })()}
+
+      {/* 紅利填寫面板 */}
+      {showBonusPanel && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', borderRadius: 16, width: '100%', maxWidth: 480, padding: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>💰 填寫紅利 — {selectedMonth}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>填寫後會自動儲存，結算時納入薪資</div>
+              </div>
+              <button onClick={() => setShowBonusPanel(false)} style={{ background: 'transparent', border: 'none', fontSize: 20, color: 'var(--text-muted)', cursor: 'pointer' }}>✕</button>
+            </div>
+            {employees.filter(e => e.payType !== 'hourly').map(emp => (
+              <div key={emp.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{emp.name}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{bonuses[emp.id] != null ? `已填 $${bonuses[emp.id].toLocaleString()}` : '尚未填寫'}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>$</span>
+                  <input
+                    type="number" min={0} placeholder="0"
+                    value={bonusInput[emp.id] ?? ''}
+                    onChange={e => setBonusInput(prev => ({ ...prev, [emp.id]: e.target.value }))}
+                    style={{ width: 100, padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 14, fontWeight: 700, textAlign: 'right' }}
+                  />
+                </div>
+              </div>
+            ))}
+            <button
+              onClick={async () => {
+                try {
+                  for (const emp of employees.filter(e => e.payType !== 'hourly')) {
+                    const amount = Number(bonusInput[emp.id] ?? 0);
+                    await setDoc(doc(db, 'bonuses', `${emp.id}_${selectedMonth}`), {
+                      empId: emp.id, empName: emp.name, month: selectedMonth, amount,
+                    });
+                  }
+                  alert('✅ 紅利已儲存！');
+                  setShowBonusPanel(false);
+                  await fetchSnapshots();
+                } catch (err) { alert('儲存失敗：' + err.message); }
+              }}
+              style={{ padding: '12px 24px', borderRadius: 9, fontWeight: 700, fontSize: 14, background: 'var(--amber)', color: '#fff', border: 'none', cursor: 'pointer' }}
+            >儲存所有紅利</button>
+          </div>
         </div>
       )}
 
