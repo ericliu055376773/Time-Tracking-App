@@ -78,7 +78,7 @@ export default function AdminDashboard() {
       const punchSnap = await getDoc(doc(db, 'settings', 'punchSettings'));
       setPunchSettings(punchSnap.exists() ? punchSnap.data() : {});
     } catch (err) { console.error(err); }
-  }
+  }, [selectedMonth]);
 
   // 載入當月薪資快照
   const fetchSnapshots = useCallback(async () => {
@@ -148,8 +148,6 @@ export default function AdminDashboard() {
       await fetchSnapshots();
     } catch (err) { alert('結算失敗：' + err.message); }
   }
-
-  }, [selectedMonth]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -1253,6 +1251,12 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
                       <div style={{ fontSize: 11, color: salaryBreakdown?.hasFullAttendance ? 'var(--green)' : 'var(--text-muted)', marginTop: 3 }}>
                         {salaryBreakdown?.hasFullAttendance ? '✓ 本月條件達成（月底結算後自動計入）' : '本月尚未達成'}
                       </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
           {/* 薪資單列印 */}
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
