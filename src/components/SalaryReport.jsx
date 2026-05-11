@@ -1,6 +1,3 @@
-以下是完整內容，直接複製貼上到 `src/hooks/useSalaryCalc.js`：
-
-```javascript
 // src/hooks/useSalaryCalc.js
 // 薪資計算核心邏輯
 //
@@ -272,4 +269,3 @@ export function fmtHours(h) {
   const mins = Math.round((h - hrs) * 60);
   return mins > 0 ? `${hrs}h ${mins}m` : `${hrs}h`;
 }
-```
