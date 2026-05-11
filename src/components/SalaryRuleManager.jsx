@@ -699,10 +699,25 @@ function EqResult({ children, color }) {
 }
 
 function NumInput({ value, onChange, width = 100 }) {
+  // 文字輸入，允許空白過渡，失焦時轉回數字
+  const [local, setLocal] = React.useState(String(value ?? ''));
+  React.useEffect(() => { setLocal(String(value ?? '')); }, [value]);
   return (
-    <input type="number" min="0" value={value}
-      onChange={e => onChange(Number(e.target.value))}
-      style={{ width, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 13, background: 'var(--bg-base)', color: '#fff', fontWeight: 700, textAlign: 'center', outline: 'none' }}
+    <input
+      type="text"
+      inputMode="numeric"
+      value={local}
+      onChange={e => {
+        const v = e.target.value.replace(/[^0-9.]/g, '');
+        setLocal(v);
+        if (v !== '' && !isNaN(Number(v))) onChange(Number(v));
+      }}
+      onBlur={() => {
+        const n = Number(local);
+        if (local === '' || isNaN(n)) { setLocal(String(value ?? 0)); }
+        else { onChange(n); setLocal(String(n)); }
+      }}
+      style={{ width, padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 7, fontSize: 14, background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontWeight: 700, textAlign: 'center', outline: 'none' }}
     />
   );
 }
