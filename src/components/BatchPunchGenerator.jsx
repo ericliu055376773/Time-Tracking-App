@@ -122,7 +122,7 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
             userName: emp?.name || '',
             type: r.leaveType,
             date: r.date,
-            days: 1,
+            workdays: 1,
             status: 'approved',
             reason: '批量模擬請假',
             createdAt: Timestamp.fromDate(new Date()),
@@ -337,28 +337,30 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
                             const exists = prev.find(l => l.day === String(d));
                             if (!exists) return [...prev, { day: String(d), type: '事假' }];
                             if (exists.type === '事假') return prev.map(l => l.day === String(d) ? { ...l, type: '病假' } : l);
+                            if (exists.type === '病假') return prev.map(l => l.day === String(d) ? { ...l, type: '特休' } : l);
                             return prev.filter(l => l.day !== String(d));
                           });
                         }}
                         style={{
                           width: 36, height: 28, borderRadius: 6, fontSize: 10, fontWeight: 700,
-                          border: `1px solid ${entry ? (entry.type === '事假' ? 'var(--red)' : 'var(--amber)') : 'var(--border)'}`,
-                          background: entry ? (entry.type === '事假' ? 'rgba(239,68,68,0.15)' : 'rgba(245,158,11,0.15)') : 'var(--bg-elevated)',
-                          color: entry ? (entry.type === '事假' ? 'var(--red)' : 'var(--amber)') : 'var(--text-muted)',
+                          border: `1px solid ${entry ? (entry.type === '事假' ? 'var(--red)' : entry.type === '病假' ? 'var(--amber)' : 'var(--green)') : 'var(--border)'}`,
+                          background: entry ? (entry.type === '事假' ? 'rgba(239,68,68,0.15)' : entry.type === '病假' ? 'rgba(245,158,11,0.15)' : 'rgba(34,197,94,0.15)') : 'var(--bg-elevated)',
+                          color: entry ? (entry.type === '事假' ? 'var(--red)' : entry.type === '病假' ? 'var(--amber)' : 'var(--green)') : 'var(--text-muted)',
                           cursor: 'pointer',
                         }}>
-                        {entry ? (entry.type === '事假' ? '事' : '病') : '—'}
+                        {entry ? (entry.type === '事假' ? '事' : entry.type === '病假' ? '病' : '休') : '—'}
                       </button>
                     </div>
                   );
                 })}
               </div>
               <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-                點一下 → 事假（紅）｜再點 → 病假（橘）｜再點 → 取消
+                點一下 → 事假（紅）｜再點 → 病假（橘）｜再點 → 特休（綠）｜再點 → 取消
                 {leaveDays.length > 0 && (
                   <span style={{ marginLeft: 12, color: 'var(--red)' }}>
                     事假 {leaveDays.filter(l=>l.type==='事假').length} 天，
-                    病假 {leaveDays.filter(l=>l.type==='病假').length} 天
+                    病假 {leaveDays.filter(l=>l.type==='病假').length} 天，
+                    特休 {leaveDays.filter(l=>l.type==='特休').length} 天
                   </span>
                 )}
               </div>
@@ -411,7 +413,7 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
                       </td>
                       <td style={{ padding: '8px 12px', fontSize: 11 }}>
                         {r.leaveType
-                          ? <span style={{ color: r.leaveType === '事假' ? 'var(--red)' : 'var(--amber)', fontWeight: 700 }}>📋 {r.leaveType}</span>
+                          ? <span style={{ color: r.leaveType === '事假' ? 'var(--red)' : r.leaveType === '病假' ? 'var(--amber)' : 'var(--green)', fontWeight: 700 }}>📋 {r.leaveType}</span>
                           : r.isMissed ? <span style={{ color: 'var(--text-muted)' }}>⚠ 忘打下班</span> : ''}
                       </td>
                     </tr>
