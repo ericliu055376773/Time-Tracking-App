@@ -251,10 +251,10 @@ export default function SalaryReport({
               { label: '加班時數', value: fmtHours(totalOvertimeHours) },
               {
                 label: '請假天數',
-                value: `${approvedLeaves.reduce(
-                  (s, l) => s + l.workdays,
-                  0
-                )} 天`,
+                value: (() => {
+                  const total = approvedLeaves.reduce((s, l) => s + (l.workdays ?? l.days ?? 1), 0);
+                  return total > 0 ? `${total} 天` : '無';
+                })(),
               },
             ].map((item) => (
               <div
