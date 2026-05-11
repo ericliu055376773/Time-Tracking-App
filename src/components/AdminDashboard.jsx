@@ -92,7 +92,11 @@ export default function AdminDashboard() {
     const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
     const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
     const dailyRate = emp.payType === 'hourly' ? (emp.hourlyRate||0)*8 : (baseSal + mealSal)/30;
-    const leaveDeduction = leaves.reduce((s,l) => s + dailyRate*l.workdays*(1-(l.payRate??1)), 0);
+    // ✅ 月薪制：totalSalary 已包含扣款，不重複扣；時薪制依 payRate 扣
+    // l.workdays ?? l.days 防止舊資料欄位不一致造成 NaN
+    const leaveDeduction = emp.payType === 'hourly'
+      ? leaves.reduce((s, l) => s + dailyRate * (l.workdays ?? l.days ?? 1) * (1 - (l.payRate ?? 1)), 0)
+      : 0; // 月薪制扣款已在 calcSalaryFromPunches 內計算
     return { ...emp, punches, leaves, totalHours, totalOvertimeHours,
       netSalary: Math.max(0, totalSalary - leaveDeduction), leaveDeduction, punchCount: punches.length };
   });
