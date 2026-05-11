@@ -49,6 +49,7 @@ export default function AdminDashboard() {
   const [salaryRules, setSalaryRules] = useState({});
   const [punchSettings, setPunchSettings] = useState({});
   const [showBatchGen, setShowBatchGen] = useState(false);
+  const [monthSnapshots, setMonthSnapshots] = useState({}); // empId → snapshot
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -77,7 +78,77 @@ export default function AdminDashboard() {
       const punchSnap = await getDoc(doc(db, 'settings', 'punchSettings'));
       setPunchSettings(punchSnap.exists() ? punchSnap.data() : {});
     } catch (err) { console.error(err); }
-    setLoading(false);
+  }
+
+  // 載入當月薪資快照
+  const fetchSnapshots = useCallback(async () => {
+    try {
+      const snap = await getDocs(query(collection(db, 'salarySnapshots'), where('month', '==', selectedMonth)));
+      const map = {};
+      snap.docs.forEach(d => { map[d.data().empId] = d.data(); });
+      setMonthSnapshots(map);
+    } catch (err) { console.error('fetchSnapshots error:', err); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth]);
+
+  useEffect(() => { fetchSnapshots(); }, [fetchSnapshots]);
+
+  // 結算本月：把所有員工薪資快照儲存到 Firestore
+  async function handleSettleMonth() {
+    const now = new Date();
+    const [sy, sm] = selectedMonth.split('-').map(Number);
+    const isCurrentMonth = now.getFullYear() === sy && (now.getMonth() + 1) === sm;
+    if (!isCurrentMonth) {
+      if (!window.confirm(`確定重新結算 ${selectedMonth}？這會覆蓋已儲存的快照。`)) return;
+    } else {
+      if (!window.confirm(`確定結算 ${selectedMonth}？\n結算後薪資明細將鎖定，回查時不會因為調薪而變動。`)) return;
+    }
+    try {
+      const posMap2 = Object.fromEntries((positions||[]).map(p => [p.id, p]));
+      for (const emp of salarySummaries) {
+        const pos = posMap2[emp.positionId];
+        const docId = `${emp.id}_${selectedMonth}`;
+        await setDoc(doc(db, 'salarySnapshots', docId), {
+          empId: emp.id,
+          empName: emp.name,
+          month: selectedMonth,
+          lockedAt: Timestamp.now(),
+          positionName: pos?.name || '--',
+          payType: emp.payType,
+          baseSalary: pos?.baseSalary ?? emp.monthlySalary ?? 0,
+          mealAllowance: pos?.mealAllowance ?? emp.mealAllowance ?? 0,
+          hourlyRate: emp.hourlyRate || 0,
+          totalHours: emp.totalHours || 0,
+          totalOvertimeHours: emp.totalOvertimeHours || 0,
+          netSalary: emp.netSalary || 0,
+          leaveDeduction: emp.leaveDeduction || 0,
+          ...(emp.salaryBreakdown ? {
+            attendedDays: emp.salaryBreakdown.attendedDays,
+            basePay: emp.salaryBreakdown.basePay,
+            mealPay: emp.salaryBreakdown.mealPay,
+            personalDeduction: emp.salaryBreakdown.personalDeduction,
+            sickDeduction: emp.salaryBreakdown.sickDeduction,
+            overtimePay: emp.salaryBreakdown.overtimePay,
+            fullAttendancePay: emp.salaryBreakdown.fullAttendancePay,
+            hasFullAttendance: emp.salaryBreakdown.hasFullAttendance,
+            hasLate: emp.salaryBreakdown.hasLate,
+            hasLeave: emp.salaryBreakdown.hasLeave,
+            hasMissedPunch: emp.salaryBreakdown.hasMissedPunch,
+            workingDaysBase: emp.salaryBreakdown.workingDaysBase,
+            personalLeaveDays: emp.salaryBreakdown.personalLeaveDays,
+            sickLeaveDays: emp.salaryBreakdown.sickLeaveDays,
+            impliedHourlyRate: emp.salaryBreakdown.impliedHourlyRate,
+            totalOtMins: emp.salaryBreakdown.totalOtMins,
+            totalOt1Mins: emp.salaryBreakdown.totalOt1Mins,
+            totalOt2Mins: emp.salaryBreakdown.totalOt2Mins,
+          } : {}),
+        });
+      }
+      alert(`✅ ${selectedMonth} 結算完成！共 ${salarySummaries.length} 位員工薪資已鎖定。`);
+      await fetchSnapshots();
+    } catch (err) { alert('結算失敗：' + err.message); }
+  }
+
   }, [selectedMonth]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
@@ -424,9 +495,9 @@ export default function AdminDashboard() {
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && (() => {
           switch(activeTab) {
-            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} />;
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} monthSnapshots={monthSnapshots} onSettle={handleSettleMonth} />;
             case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
-            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} fetchAll={fetchAll} />;
             case '請假審核': return <LeaveManager isAdmin={true} />;
             case 'WiFi 設定': return <WifiSettings />;
             case '職位薪資': return <PositionManager />;
@@ -571,32 +642,63 @@ export default function AdminDashboard() {
   );
 }
 
-function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {} }) {
+function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, monthSnapshots = {}, onSettle }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
+  const isSettled = Object.keys(monthSnapshots).length > 0;
+
   return (
-    <div className="table-wrapper">
-      <table style={{ minWidth: 800 }}>
-        <thead>
-          <tr><th>姓名</th><th>職位</th><th>薪資類型</th><th>費率</th><th>工時</th><th>加班</th><th>請假扣薪</th><th>實發薪資</th><th>薪資單</th></tr>
-        </thead>
-        <tbody>
-          {summaries.length === 0 ? (
-            <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>尚無員工資料</td></tr>
-          ) : summaries.map(emp => (
-            <tr key={emp.id}>
-              <td style={{ fontWeight: 600 }}>{emp.name}</td>
-              <td>{emp.positionId ? (posMap[emp.positionId]?.name || '--') : '--'}</td>
-              <td><span className={`badge ${emp.payType === 'hourly' ? 'badge-amber' : 'badge-muted'}`}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</span></td>
-              <td style={{ fontFamily: 'var(--mono)' }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(posMap[emp.positionId]?.baseSalary ?? emp.monthlySalary ?? 0).toLocaleString()}/mo`}</td>
-              <td style={{ fontFamily: 'var(--mono)' }}>{emp.totalHours > 0 ? fmtHours(emp.totalHours) : '--'}</td>
-              <td style={{ fontFamily: 'var(--mono)', color: emp.totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{emp.totalOvertimeHours > 0 ? fmtHours(emp.totalOvertimeHours) : '--'}</td>
-              <td style={{ fontFamily: 'var(--mono)', color: emp.leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{emp.leaveDeduction > 0 ? `-${fmtMoney(emp.leaveDeduction)}` : '--'}</td>
-              <td style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: emp.netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(emp.netSalary)}</td>
-              <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} salaryRules={salaryRules} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* 結算列 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 4px' }}>
+        <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+          {isSettled
+            ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>🔒 {month} 已結算 — 以下為鎖定快照，不受後續調薪影響</span>
+            : <span style={{ color: 'var(--text-muted)' }}>尚未結算 — 目前顯示即時計算結果</span>}
+        </div>
+        <button onClick={onSettle} style={{
+          padding: '8px 20px', borderRadius: 8, fontWeight: 700, fontSize: 13,
+          background: isSettled ? 'var(--bg-elevated)' : 'var(--amber)',
+          color: isSettled ? 'var(--text-secondary)' : '#fff',
+          border: isSettled ? '1px solid var(--border)' : 'none', cursor: 'pointer',
+        }}>
+          {isSettled ? '🔄 重新結算' : '💾 結算本月'}
+        </button>
+      </div>
+
+      <div className="table-wrapper">
+        <table style={{ minWidth: 800 }}>
+          <thead>
+            <tr><th>姓名</th><th>職位</th><th>薪資類型</th><th>費率</th><th>工時</th><th>加班</th><th>請假扣薪</th><th>實發薪資</th><th>薪資單</th></tr>
+          </thead>
+          <tbody>
+            {summaries.length === 0 ? (
+              <tr><td colSpan={9} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: 40 }}>尚無員工資料</td></tr>
+            ) : summaries.map(emp => {
+              const snap = monthSnapshots[emp.id];
+              const netSalary = snap ? snap.netSalary : emp.netSalary;
+              const totalHours = snap ? snap.totalHours : emp.totalHours;
+              const totalOvertimeHours = snap ? snap.totalOvertimeHours : emp.totalOvertimeHours;
+              const leaveDeduction = snap ? snap.leaveDeduction : emp.leaveDeduction;
+              return (
+                <tr key={emp.id} style={{ background: snap ? 'rgba(34,197,94,0.03)' : 'transparent' }}>
+                  <td style={{ fontWeight: 600 }}>
+                    {emp.name}
+                    {snap && <span style={{ fontSize: 9, color: 'var(--green)', marginLeft: 4, fontWeight: 400 }}>🔒</span>}
+                  </td>
+                  <td>{emp.positionId ? (snap?.positionName || posMap[emp.positionId]?.name || '--') : '--'}</td>
+                  <td><span className={`badge ${emp.payType === 'hourly' ? 'badge-amber' : 'badge-muted'}`}>{emp.payType === 'hourly' ? '時薪制' : '月薪制'}</span></td>
+                  <td style={{ fontFamily: 'var(--mono)' }}>{emp.payType === 'hourly' ? `$${emp.hourlyRate}/hr` : `$${(snap?.baseSalary ?? posMap[emp.positionId]?.baseSalary ?? emp.monthlySalary ?? 0).toLocaleString()}/mo`}</td>
+                  <td style={{ fontFamily: 'var(--mono)' }}>{totalHours > 0 ? fmtHours(totalHours) : '--'}</td>
+                  <td style={{ fontFamily: 'var(--mono)', color: totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{totalOvertimeHours > 0 ? fmtHours(totalOvertimeHours) : '--'}</td>
+                  <td style={{ fontFamily: 'var(--mono)', color: leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{leaveDeduction > 0 ? `-${fmtMoney(leaveDeduction)}` : '--'}</td>
+                  <td style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(netSalary)}</td>
+                  <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} salaryRules={salaryRules} snapshot={snap || null} /></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1029,8 +1131,24 @@ const labelStyle = {
   fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', color: 'var(--text-muted)', textTransform: 'uppercase',
 };
 
+// ── 全勤次數（自動從結算快照統計）──────────────────────────────
+function SnapCount({ uid }) {
+  const [count, setCount] = React.useState(null);
+  React.useEffect(() => {
+    if (!uid) { setCount(0); return; }
+    getDocs(query(collection(db, 'salarySnapshots'), where('empId', '==', uid)))
+      .then(s => setCount(s.docs.filter(d => d.data().hasFullAttendance === true).length))
+      .catch(() => setCount(0));
+  }, [uid]);
+  return (
+    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--mono)', color: (count || 0) > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>
+      {count === null ? '…' : `${count} 次`}
+    </div>
+  );
+}
+
 // ── 員工查詢 Tab ─────────────────────────────────────────────
-function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {} }) {
+function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, fetchAll = () => {} }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const emp = employees.find(e => e.id === queryEmpId);
   const punches = allPunches.filter(p => p.uid === queryEmpId);
@@ -1102,17 +1220,8 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
 
             return (
               <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                  {cards.map(item => (
-                    <div key={item.label} className="card" style={{ padding: '14px 16px' }}>
-                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 6 }}>{item.label}</div>
-                      <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600, color: item.color }}>{item.value}</div>
-                    </div>
-                  ))}
-                </div>
-
                 {/* 年資 + 特休卡片 */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
                   <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
                     <div style={{ fontSize: 28 }}>🗓️</div>
                     <div>
@@ -1135,66 +1244,18 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
                       )}
                     </div>
                   </div>
-                </div>
-              </>
-            );
-          })()}
-
-          {/* 薪資計算方式 */}
-          <div className="card">
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14, letterSpacing: '0.08em' }}>薪資計算方式</div>
-            {emp.payType === 'monthly' && salaryBreakdown ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {(() => {
-                  // ✅ Fix 1+2: 底薪/餐費從職位讀取，不從員工欄位讀
-                  const pos = posMap[emp.positionId];
-                  const displayBase = pos?.baseSalary ?? emp.monthlySalary ?? 0;
-                  const displayMeal = pos?.mealAllowance ?? emp.mealAllowance ?? 0;
-                  const { hasAbsent } = salaryBreakdown;
-                  const fullLabel = `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
-                  const { missedPunchCount = 0, maxMissedPunchForFullAtt: maxMP = 0 } = salaryBreakdown;
-                  const missedLabel = missedPunchCount > 0 ? `忘打卡 ${missedPunchCount} 次（上限 ${maxMP} 次）` : null;
-                  const fullSub = salaryBreakdown.hasFullAttendance
-                    ? '達成全勤條件'
-                    : [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', missedLabel, hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
-                  return [
-                    { label: '底薪', sub: `$${displayBase.toLocaleString()}（全額）`, value: fmtMoney(salaryBreakdown.basePay) },
-                    { label: '餐費', sub: `$${displayMeal.toLocaleString()}（全額）`, value: fmtMoney(salaryBreakdown.mealPay) },
-                    ...(salaryBreakdown.personalDeduction > 0 ? [{ label: `事假扣款（${salaryBreakdown.personalLeaveDays}天）`, sub: `（底薪 $${displayBase.toLocaleString()} + 餐費 $${displayMeal.toLocaleString()}）÷ ${salaryBreakdown.workingDaysBase} 天 × ${salaryBreakdown.personalLeaveDays} 天`, value: `-${fmtMoney(salaryBreakdown.personalDeduction)}`, negative: true }] : []),
-                    ...(salaryBreakdown.sickDeduction > 0 ? [{ label: `病假扣款（${salaryBreakdown.sickLeaveDays}天）`, sub: `底薪 $${displayBase.toLocaleString()} ÷ ${salaryBreakdown.workingDaysBase} × 0.5 + 餐費 $${displayMeal.toLocaleString()} ÷ ${salaryBreakdown.workingDaysBase}，共 ${salaryBreakdown.sickLeaveDays} 天`, value: `-${fmtMoney(salaryBreakdown.sickDeduction)}`, negative: true }] : []),
-                    ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: (() => {
-                      const { impliedHourlyRate: hr, totalOt1Mins: m1 = 0, totalOt2Mins: m2 = 0, totalOtMins: tm = 0 } = salaryBreakdown;
-                      const parts = [];
-                      if (m1 > 0) parts.push(`×1.34段（每日超過8h前2h累計）：${m1}分 × $${hr} ÷ 60 × 1.34 = $${Math.round(m1 * hr * 1.34 / 60)}`);
-                      if (m2 > 0) parts.push(`×1.67段（每日超過10h累計）：${m2}分 × $${hr} ÷ 60 × 1.67 = $${Math.round(m2 * hr * 1.67 / 60)}`);
-                      return `換算時薪 $${hr}/hr（底薪 ÷ 當月天數${salaryBreakdown.workingDaysBase}天 ÷ 8h）｜總加班 ${tm} 分鐘｜${parts.join('｜')}`;
-                    })(), value: fmtMoney(salaryBreakdown.overtimePay) }] : []),
-                    { label: fullLabel, sub: fullSub, value: fmtMoney(salaryBreakdown.fullAttendancePay), dim: !salaryBreakdown.hasFullAttendance },
-                    { label: '紅利', sub: '月底另行計算', value: '—', dim: true },
-                  ];
-                })().map((item, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', opacity: item.dim && item.value === '—' ? 0.45 : 1 }}>
-                    <div>
-                      <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
-                      {item.sub && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{item.sub}</div>}
-                    </div>
-                    <div style={{ fontFamily: 'var(--mono)', fontSize: 14, fontWeight: 600 }}>{item.value}</div>
-                  </div>
-                ))}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0 0' }}>
-                  <div style={{ fontSize: 15, fontWeight: 700 }}>實領薪資（不含紅利）</div>
-                  <div style={{ fontFamily: 'var(--mono)', fontSize: 22, fontWeight: 700, color: 'var(--amber)' }}>{fmtMoney(netSalary)}</div>
-                </div>
-              </div>
-            ) : (
-              <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                時薪制：${emp.hourlyRate}/hr × {totalHours.toFixed(1)}h = <strong style={{ color: 'var(--amber)' }}>{fmtMoney(netSalary)}</strong>
-              </div>
-            )}
-          </div>
+                  {/* 全勤次數 */}
+                  <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ fontSize: 28 }}>🏆</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>全勤次數</div>
+                      <SnapCount uid={queryEmpId} />
+                      <div style={{ fontSize: 11, color: salaryBreakdown?.hasFullAttendance ? 'var(--green)' : 'var(--text-muted)', marginTop: 3 }}>
+                        {salaryBreakdown?.hasFullAttendance ? '✓ 本月條件達成（月底結算後自動計入）' : '本月尚未達成'}
+                      </div>
 
           {/* 薪資單列印 */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
             <SalaryReport
               employee={{ ...emp, _position: posMap[emp.positionId] || null }}
               punches={allPunches.filter(p => p.uid === queryEmpId)}
@@ -1206,35 +1267,6 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
             />
           </div>
 
-          {/* 打卡紀錄 */}
-          <div className="card">
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)', marginBottom: 14, letterSpacing: '0.08em' }}>打卡紀錄 — {selectedMonth}</div>
-            {dailyRecords.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 13 }}>本月尚無打卡紀錄</div>
-            ) : (
-              <div className="table-wrapper">
-                <table>
-                  <thead><tr><th>日期</th><th>班別</th><th>上班</th><th>下班</th><th>狀態</th><th>工時</th></tr></thead>
-                  <tbody>
-                    {dailyRecords.map(r => (
-                      <tr key={r.date}>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.date}</td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--amber)', fontWeight: 700 }}>{r.shiftId || '--'}</td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--green)' }}>{r.inTime || '--'}</td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12, color: 'var(--red)' }}>{r.outTime || '--'}</td>
-                        <td style={{ fontSize: 11 }}>
-                          {r.lateMinutes > 0
-                            ? <span style={{ color: 'var(--red)', fontWeight: 600 }}>遲到 {r.lateMinutes}分</span>
-                            : r.inTime ? <span style={{ color: 'var(--green)' }}>準時</span> : '--'}
-                        </td>
-                        <td style={{ fontFamily: 'var(--mono)', fontSize: 12 }}>{r.hours > 0 ? fmtHours(r.hours) : '--'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
         </>
       )}
     </div>
