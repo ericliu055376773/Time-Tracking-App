@@ -78,6 +78,7 @@ export default function AdminDashboard() {
       const punchSnap = await getDoc(doc(db, 'settings', 'punchSettings'));
       setPunchSettings(punchSnap.exists() ? punchSnap.data() : {});
     } catch (err) { console.error(err); }
+    finally { setLoading(false); }
   }, [selectedMonth]);
 
   // 載入當月薪資快照
