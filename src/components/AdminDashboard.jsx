@@ -1075,19 +1075,70 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
       ) : (
         <>
           {/* 出勤概覽 */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-            {[
+          {(() => {
+            // 年資計算
+            const hired = emp.hiredAt?.toDate ? emp.hiredAt.toDate() : (emp.hiredAt ? new Date(emp.hiredAt) : null);
+            const now = new Date();
+            const totalMonths = hired ? Math.floor((now - hired) / (1000*60*60*24*30.44)) : null;
+            const years = totalMonths !== null ? Math.floor(totalMonths / 12) : null;
+            const remMonths = totalMonths !== null ? totalMonths % 12 : null;
+            const tenureStr = totalMonths === null ? '未設定到職日'
+              : years > 0 ? `${years} 年 ${remMonths} 個月`
+              : `${totalMonths} 個月`;
+
+            // 特休計算
+            const annualTotal = totalMonths !== null ? calcAnnualLeave(totalMonths) : 0;
+            const usedAnnual = allLeaves
+              .filter(l => l.uid === queryEmpId && l.status === 'approved' && l.type === '特休')
+              .reduce((s, l) => s + (l.workdays ?? l.days ?? 1), 0);
+            const remainAnnual = Math.max(0, annualTotal - usedAnnual);
+
+            const cards = [
               { label: '出勤天數', value: `${attendedDays} 天`, color: 'var(--green)' },
               { label: '工作時數', value: fmtHours(totalHours), color: 'var(--text-primary)' },
               { label: '加班時數', value: totalOvertimeHours > 0 ? fmtHours(totalOvertimeHours) : '--', color: 'var(--amber)' },
               { label: '預估薪資', value: fmtMoney(netSalary), color: 'var(--amber)' },
-            ].map(item => (
-              <div key={item.label} className="card" style={{ padding: '14px 16px' }}>
-                <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 6 }}>{item.label}</div>
-                <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600, color: item.color }}>{item.value}</div>
-              </div>
-            ))}
-          </div>
+            ];
+
+            return (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
+                  {cards.map(item => (
+                    <div key={item.label} className="card" style={{ padding: '14px 16px' }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 6 }}>{item.label}</div>
+                      <div style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 600, color: item.color }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* 年資 + 特休卡片 */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ fontSize: 28 }}>🗓️</div>
+                    <div>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>年資</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--mono)' }}>{tenureStr}</div>
+                      {hired && <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>到職：{hired.toISOString().slice(0,10)}</div>}
+                    </div>
+                  </div>
+                  <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <div style={{ fontSize: 28 }}>🌴</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-muted)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: 4 }}>特休剩餘</div>
+                      <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--mono)', color: remainAnnual > 0 ? 'var(--green)' : 'var(--text-muted)' }}>
+                        {annualTotal > 0 ? `${remainAnnual} 天` : '未達資格'}
+                      </div>
+                      {annualTotal > 0 && (
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>
+                          共 {annualTotal} 天 · 已用 {usedAnnual} 天
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
           {/* 薪資計算方式 */}
           <div className="card">
