@@ -17,7 +17,8 @@ export default function SalaryReport({
   scheduleAssignments = {},
   maxMissedPunch = 0,
   salaryRules = {},
-  snapshot = null,  // 已結算快照，存在時顯示快照資料
+  snapshot = null,
+  nationalHolidays = [],
 }) {
   const printRef = useRef(null);
   const [showReport, setShowReport] = useState(false);
@@ -47,7 +48,7 @@ export default function SalaryReport({
   let calcResult = { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
   let calcError = null;
   try {
-    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch, salaryRules);
+    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch, salaryRules, nationalHolidays);
   } catch (err) {
     calcError = err.message;
     console.error('SalaryReport calcError:', err);
@@ -403,6 +404,7 @@ export default function SalaryReport({
                     { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()}（全額）`, amount: salaryBreakdown.mealPay, isDeduction: false },
                     ...(salaryBreakdown.personalDeduction > 0 ? [{ label: `事假扣款（${salaryBreakdown.personalLeaveDays}天）`, sub: `（底薪 $${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} + 餐費 $${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()}）÷ ${salaryBreakdown.workingDaysBase} 天 × ${salaryBreakdown.personalLeaveDays} 天`, amount: -salaryBreakdown.personalDeduction, isDeduction: true }] : []),
                     ...(salaryBreakdown.sickDeduction > 0 ? [{ label: `病假扣款（${salaryBreakdown.sickLeaveDays}天）`, sub: `底薪 ÷ ${salaryBreakdown.workingDaysBase} × 0.5（半薪）+ 餐費 ÷ ${salaryBreakdown.workingDaysBase}（全扣），共 ${salaryBreakdown.sickLeaveDays} 天`, amount: -salaryBreakdown.sickDeduction, isDeduction: true }] : []),
+                    ...(salaryBreakdown.holidayPay > 0 ? [{ label: `國定假日加給（${salaryBreakdown.holidayDays}天）`, sub: `出勤國定假日額外加計一天薪水（底薪 + 餐費）÷ ${salaryBreakdown.workingDaysBase} × ${salaryBreakdown.holidayDays}`, amount: salaryBreakdown.holidayPay, isDeduction: false }] : []),
                     ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: (() => {
                       const { impliedHourlyRate: hr, totalOt1Mins: m1 = 0, totalOt2Mins: m2 = 0, totalOtMins: tm = 0 } = salaryBreakdown;
                       const parts = [];
