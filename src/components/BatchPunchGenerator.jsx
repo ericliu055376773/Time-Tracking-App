@@ -1,7 +1,7 @@
 // BatchPunchGenerator.jsx
 // 批量模擬打卡紀錄生成器
-import React, { useState } from 'react';
-import { collection, addDoc, getDocs, query, where, deleteDoc, doc } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { collection, addDoc, getDocs, query, where, deleteDoc, doc, getDoc } from 'firebase/firestore';
 import { Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { format, getDaysInMonth, parseISO } from 'date-fns';
@@ -41,11 +41,20 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
   const [missedDays, setMissedDays]   = useState([]);  // 忘打下班卡的日期
   const [leaveDays, setLeaveDays]     = useState([]); // [{ day: '5', type: '事假' }]
   const [clearFirst, setClearFirst]   = useState(true);
+  const [nationalHolidays, setNationalHolidays] = useState([]); // 當月國定假日
   const [generating, setGenerating]   = useState(false);
   const [preview, setPreview]         = useState([]);
   const [result, setResult]           = useState(null);
 
   const emp = employees.find(e => e.id === empId);
+
+  // 切換月份時從 Firestore 載入國定假日（由月薪算法頁面存入）
+  useEffect(() => {
+    if (!month) return;
+    getDoc(doc(db, 'settings', `holidays_${month}`))
+      .then(snap => setNationalHolidays(snap.exists() ? (snap.data().dates || []) : []))
+      .catch(() => setNationalHolidays([]));
+  }, [month]);
 
   // 計算當月所有工作日
   function buildSchedule() {
@@ -67,6 +76,7 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
       const outDt = new Date(`${dateStr}T${String(oh).padStart(2,'0')}:${String(om).padStart(2,'0')}:00`);
 
       const leaveEntry = leaveDays.find(l => l.day === String(d));
+      const isNH = nationalHolidays.includes(dateStr);
       records.push({
         date: dateStr, dow,
         inTime: leaveEntry ? null : format(inDt, 'HH:mm'),
@@ -76,6 +86,7 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
         lateMinutes: leaveEntry ? 0 : actualLate,
         isMissed: leaveEntry ? false : isMissed,
         leaveType: leaveEntry?.type || null,
+        isNationalHoliday: isNH,
       });
     }
     return records;
@@ -385,16 +396,24 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
 
           {/* ── STEP 2: 預覽 ── */}
           {step === 2 && (<>
-            <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-              員工：<strong style={{ color: 'var(--text-primary)' }}>{emp?.name}</strong> ·
-              月份：<strong style={{ color: 'var(--text-primary)' }}>{month}</strong> ·
-              共 <strong style={{ color: 'var(--amber)' }}>{preview.length}</strong> 個工作日
+            <div style={{ fontSize: 13, color: 'var(--text-secondary)', display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+              <span>員工：<strong style={{ color: 'var(--text-primary)' }}>{emp?.name}</strong></span>
+              <span>月份：<strong style={{ color: 'var(--text-primary)' }}>{month}</strong></span>
+              <span>工作日：<strong style={{ color: 'var(--amber)' }}>{preview.length}</strong> 天</span>
+              {preview.filter(r => r.isNationalHoliday && !r.leaveType).length > 0 && (
+                <span style={{ color: 'var(--green)', fontWeight: 700 }}>
+                  🎌 國定假日出勤：{preview.filter(r => r.isNationalHoliday && !r.leaveType).length} 天（雙薪）
+                </span>
+              )}
+              {nationalHolidays.length === 0 && (
+                <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>⚠ 請先至月薪算法頁面載入假日資料</span>
+              )}
             </div>
             <div style={{ ...card, padding: 0, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ background: 'var(--bg-elevated)' }}>
-                    {['日期', '星期', '上班', '下班', '遲到', '備註'].map(h => (
+                    {['日期', '星期', '上班', '下班', '遲到', '備註', '估算日薪'].map(h => (
                       <th key={h} style={{ padding: '10px 12px', fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textAlign: 'left', letterSpacing: '0.05em' }}>{h}</th>
                     ))}
                   </tr>
@@ -414,7 +433,11 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
                       <td style={{ padding: '8px 12px', fontSize: 11 }}>
                         {r.leaveType
                           ? <span style={{ color: r.leaveType === '事假' ? 'var(--red)' : r.leaveType === '病假' ? 'var(--amber)' : 'var(--green)', fontWeight: 700 }}>📋 {r.leaveType}</span>
-                          : r.isMissed ? <span style={{ color: 'var(--text-muted)' }}>⚠ 忘打下班</span> : ''}
+                          : r.isMissed ? <span style={{ color: 'var(--text-muted)' }}>⚠ 忘打下班</span>
+                          : r.isNationalHoliday ? <span style={{ color: 'var(--green)', fontWeight: 700 }}>🎌 國定假日</span> : ''}
+                      </td>
+                      <td style={{ padding: '8px 12px', fontSize: 11, fontFamily: 'var(--mono)', color: r.isNationalHoliday && !r.leaveType ? 'var(--green)' : 'var(--text-muted)' }}>
+                        {r.leaveType ? '--' : r.isNationalHoliday ? '×2 雙薪' : '正常'}
                       </td>
                     </tr>
                   ))}
