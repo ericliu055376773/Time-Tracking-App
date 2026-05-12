@@ -16,7 +16,7 @@ export default function SalaryReport({
   leaves = [],
   month,
   scheduleAssignments = {},
-  maxMissedPunch = 0,xq
+  maxMissedPunch = 0,
   salaryRules = {},
   snapshot = null,
   nationalHolidays = [],  // 父層傳入，若為空則自動抓
