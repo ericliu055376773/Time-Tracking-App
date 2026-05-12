@@ -1,6 +1,6 @@
 // src/components/SalaryReport.jsx
 // 薪資單：管理員可為任一員工產生指定月份薪資單，並列印/匯出
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   calcSalaryFromPunches,
   fmtMoney,
@@ -18,8 +18,30 @@ export default function SalaryReport({
   maxMissedPunch = 0,
   salaryRules = {},
   snapshot = null,
-  nationalHolidays = [],
+  nationalHolidays = [],  // 父層傳入，若為空則自動抓
 }) {
+  // 若父層沒有傳假日資料，SalaryReport 自行根據 month 呼叫 API
+  const [selfHolidays, setSelfHolidays] = useState(null);
+  useEffect(() => {
+    if (!month || (nationalHolidays && nationalHolidays.length > 0)) return;
+    const [hy, hm] = month.split('-').map(Number);
+    const pad = n => String(n).padStart(2, '0');
+    const lastDay = new Date(hy, hm, 0).getDate();
+    const url = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${hy}${pad(hm)}01,date:lte:${hy}${pad(hm)}${pad(lastDay)}&limit=50`;
+    fetch(url).then(r => r.json()).then(json => {
+      const records = json?.result?.records || [];
+      const holidays = records
+        .filter(r => {
+          if (r.isHoliday !== '是') return false;
+          const dt = new Date(`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+          return dt.getDay() !== 0 && dt.getDay() !== 6;
+        })
+        .map(r => `${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+      setSelfHolidays(holidays);
+    }).catch(() => setSelfHolidays([]));
+  }, [month, nationalHolidays]);
+  // 優先用父層傳入，沒有則用自己抓的
+  const effectiveHolidays = (nationalHolidays && nationalHolidays.length > 0) ? nationalHolidays : (selfHolidays || []);
   const printRef = useRef(null);
   const [showReport, setShowReport] = useState(false);
 
@@ -48,7 +70,7 @@ export default function SalaryReport({
   let calcResult = { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
   let calcError = null;
   try {
-    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch, salaryRules, nationalHolidays);
+    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch, salaryRules, effectiveHolidays);
   } catch (err) {
     calcError = err.message;
     console.error('SalaryReport calcError:', err);
