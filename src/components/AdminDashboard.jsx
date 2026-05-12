@@ -51,6 +51,7 @@ export default function AdminDashboard() {
   const [showBatchGen, setShowBatchGen] = useState(false);
   const [monthSnapshots, setMonthSnapshots] = useState({}); // empId → snapshot
   const [bonuses, setBonuses] = useState({}); // empId → amount for selected month
+  const [nationalHolidays, setNationalHolidays] = useState([]); // 當月國定假日日期陣列
   const [showBonusPanel, setShowBonusPanel] = useState(false);
   const [bonusInput, setBonusInput] = useState({}); // editing state
 
@@ -93,6 +94,9 @@ export default function AdminDashboard() {
       setMonthSnapshots(map);
       // 同時載入紅利
       const bSnap = await getDocs(query(collection(db, 'bonuses'), where('month', '==', selectedMonth)));
+      // 載入當月國定假日
+      const hdSnap = await getDoc(doc(db, 'settings', `holidays_${selectedMonth}`));
+      setNationalHolidays(hdSnap.exists() ? (hdSnap.data().dates || []) : []);
       const bMap = {};
       bSnap.docs.forEach(d => { bMap[d.data().empId] = d.data().amount ?? 0; });
       setBonuses(bMap);
@@ -168,7 +172,7 @@ export default function AdminDashboard() {
     const punches = allPunches.filter(p => p.uid === emp.id);
     const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved');
     const empWithPos = { ...emp, _position: posMap2[emp.positionId] || null };
-    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules);
+    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules, nationalHolidays);
     const pos2 = posMap2[emp.positionId];
     const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
     const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
@@ -576,9 +580,9 @@ export default function AdminDashboard() {
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && (() => {
           switch(activeTab) {
-            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} monthSnapshots={monthSnapshots} onSettle={handleSettleMonth} />;
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} monthSnapshots={monthSnapshots} onSettle={handleSettleMonth} nationalHolidays={nationalHolidays} />;
             case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
-            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} fetchAll={fetchAll} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} fetchAll={fetchAll} nationalHolidays={nationalHolidays} />;
             case '請假審核': return <LeaveManager isAdmin={true} />;
             case 'WiFi 設定': return <WifiSettings />;
             case '職位薪資': return <PositionManager />;
@@ -723,7 +727,7 @@ export default function AdminDashboard() {
   );
 }
 
-function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, monthSnapshots = {}, onSettle }) {
+function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, monthSnapshots = {}, onSettle, nationalHolidays = [] }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const isSettled = Object.keys(monthSnapshots).length > 0;
 
@@ -773,7 +777,7 @@ function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissed
                   <td style={{ fontFamily: 'var(--mono)', color: totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{totalOvertimeHours > 0 ? fmtHours(totalOvertimeHours) : '--'}</td>
                   <td style={{ fontFamily: 'var(--mono)', color: leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{leaveDeduction > 0 ? `-${fmtMoney(leaveDeduction)}` : '--'}</td>
                   <td style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(netSalary)}</td>
-                  <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} salaryRules={salaryRules} snapshot={snap || null} /></td>
+                  <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} salaryRules={salaryRules} snapshot={snap || null} nationalHolidays={nationalHolidays} /></td>
                 </tr>
               );
             })}
@@ -1229,14 +1233,14 @@ function SnapCount({ uid }) {
 }
 
 // ── 員工查詢 Tab ─────────────────────────────────────────────
-function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, fetchAll = () => {} }) {
+function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, fetchAll = () => {}, nationalHolidays = [] }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const emp = employees.find(e => e.id === queryEmpId);
   const punches = allPunches.filter(p => p.uid === queryEmpId);
   const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
   const empWithPos2 = emp ? { ...emp, _position: posMap[emp.positionId] || null } : null;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
-    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch, salaryRules)
+    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch, salaryRules, nationalHolidays)
     : { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
 
   const leaveDeduction = emp?.payType === 'hourly'
@@ -1351,6 +1355,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
               scheduleAssignments={scheduleAssignments}
               maxMissedPunch={maxMissedPunch}
               salaryRules={salaryRules}
+              nationalHolidays={nationalHolidays}
             />
           </div>
 
