@@ -94,9 +94,34 @@ export default function AdminDashboard() {
       setMonthSnapshots(map);
       // 同時載入紅利
       const bSnap = await getDocs(query(collection(db, 'bonuses'), where('month', '==', selectedMonth)));
-      // 載入當月國定假日
+      // 載入當月國定假日：先查 Firestore 快取，沒有則直接呼叫政府 API
       const hdSnap = await getDoc(doc(db, 'settings', `holidays_${selectedMonth}`));
-      setNationalHolidays(hdSnap.exists() ? (hdSnap.data().dates || []) : []);
+      if (hdSnap.exists() && (hdSnap.data().dates?.length || 0) > 0) {
+        setNationalHolidays(hdSnap.data().dates || []);
+      } else {
+        // 直接打行政院行事曆 API
+        try {
+          const [hy, hm] = selectedMonth.split('-').map(Number);
+          const pad = n => String(n).padStart(2, '0');
+          const lastDay = new Date(hy, hm, 0).getDate();
+          const apiUrl = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${hy}${pad(hm)}01,date:lte:${hy}${pad(hm)}${pad(lastDay)}&limit=50`;
+          const apiRes = await fetch(apiUrl);
+          const apiJson = await apiRes.json();
+          const records = apiJson?.result?.records || [];
+          const holidays = records
+            .filter(r => {
+              if (r.isHoliday !== '是') return false;
+              const dt = new Date(`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+              return dt.getDay() !== 0 && dt.getDay() !== 6;
+            })
+            .map(r => `${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+          setNationalHolidays(holidays);
+          // 存入 Firestore 快取
+          if (holidays.length > 0) {
+            await setDoc(doc(db, 'settings', `holidays_${selectedMonth}`), { month: selectedMonth, dates: holidays });
+          }
+        } catch { setNationalHolidays([]); }
+      }
       const bMap = {};
       bSnap.docs.forEach(d => { bMap[d.data().empId] = d.data().amount ?? 0; });
       setBonuses(bMap);
