@@ -48,12 +48,39 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
 
   const emp = employees.find(e => e.id === empId);
 
-  // 切換月份時從 Firestore 載入國定假日（由月薪算法頁面存入）
+  // 切換月份時直接呼叫政府行事曆 API 取得國定假日（平日放假才算雙薪）
   useEffect(() => {
     if (!month) return;
-    getDoc(doc(db, 'settings', `holidays_${month}`))
-      .then(snap => setNationalHolidays(snap.exists() ? (snap.data().dates || []) : []))
-      .catch(() => setNationalHolidays([]));
+    const [y, m] = month.split('-').map(Number);
+    const pad = n => String(n).padStart(2, '0');
+    const lastDay = new Date(y, m, 0).getDate();
+    const url = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${y}${pad(m)}01,date:lte:${y}${pad(m)}${pad(lastDay)}&limit=50`;
+    setNationalHolidays([]); // 重置
+    fetch(url)
+      .then(r => r.json())
+      .then(json => {
+        const records = json?.result?.records || [];
+        const holidays = records
+          .filter(r => {
+            if (r.isHoliday !== '是') return false;
+            const dt = new Date(`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+            return dt.getDay() !== 0 && dt.getDay() !== 6; // 非週六日的放假日
+          })
+          .map(r => `${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+        setNationalHolidays(holidays);
+        // 同時存進 Firestore 供其他地方使用
+        if (holidays.length > 0) {
+          import('firebase/firestore').then(({ setDoc, doc: fd }) => {
+            setDoc(fd(db, 'settings', `holidays_${month}`), { month, dates: holidays }).catch(() => {});
+          });
+        }
+      })
+      .catch(() => {
+        // API 失敗時讀 Firestore 備用
+        getDoc(doc(db, 'settings', `holidays_${month}`))
+          .then(snap => setNationalHolidays(snap.exists() ? (snap.data().dates || []) : []))
+          .catch(() => setNationalHolidays([]));
+      });
   }, [month]);
 
   // 計算當月所有工作日
@@ -420,8 +447,11 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
                 </thead>
                 <tbody>
                   {preview.map((r, i) => (
-                    <tr key={r.date} style={{ borderTop: '1px solid var(--border)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
-                      <td style={{ padding: '8px 12px', fontSize: 12, fontFamily: 'var(--mono)' }}>{r.date}</td>
+                    <tr key={r.date} style={{ borderTop: '1px solid var(--border)', background: r.isNationalHoliday && !r.leaveType ? 'rgba(34,197,94,0.06)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.01)' }}>
+                      <td style={{ padding: '8px 12px', fontSize: 12, fontFamily: 'var(--mono)' }}>
+                        {r.date}
+                        {r.isNationalHoliday && !r.leaveType && <span style={{ fontSize: 10, color: 'var(--green)', marginLeft: 4 }}>🎌</span>}
+                      </td>
                       <td style={{ padding: '8px 12px', fontSize: 12, color: 'var(--text-secondary)' }}>週{DAY_NAMES[r.dow]}</td>
                       <td style={{ padding: '8px 12px', fontSize: 12, fontFamily: 'var(--mono)', color: r.lateMinutes > 0 ? 'var(--red)' : 'var(--green)' }}>{r.inTime}</td>
                       <td style={{ padding: '8px 12px', fontSize: 12, fontFamily: 'var(--mono)', color: r.isMissed ? 'var(--text-muted)' : 'var(--red)' }}>{r.isMissed ? '--' : r.outTime}</td>
