@@ -5,6 +5,7 @@ import { collection, addDoc, getDocs, query, where, deleteDoc, doc, getDoc } fro
 import { Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { format, getDaysInMonth, parseISO } from 'date-fns';
+import { fetchTaiwanHolidaysForMonth } from '../utils/fetchHolidays';
 
 // ── 樣式常數 ──────────────────────────────────────────────
 const card = {
@@ -48,35 +49,21 @@ export default function BatchPunchGenerator({ employees, onClose, onDone }) {
 
   const emp = employees.find(e => e.id === empId);
 
-  // 切換月份時直接呼叫政府行事曆 API 取得國定假日（平日放假才算雙薪）
   useEffect(() => {
     if (!month) return;
-    const [y, m] = month.split('-').map(Number);
-    const pad = n => String(n).padStart(2, '0');
-    const lastDay = new Date(y, m, 0).getDate();
-    const url = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${y}${pad(m)}01,date:lte:${y}${pad(m)}${pad(lastDay)}&limit=50`;
-    setNationalHolidays([]); // 重置
-    fetch(url)
-      .then(r => r.json())
-      .then(json => {
-        const records = json?.result?.records || [];
-        const holidays = records
-          .filter(r => {
-            if (r.isHoliday !== '是') return false;
-            const dt = new Date(`${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
-            return dt.getDay() !== 0 && dt.getDay() !== 6; // 非週六日的放假日
-          })
-          .map(r => `${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+    setNationalHolidays([]);
+    fetchTaiwanHolidaysForMonth(month)
+      .then(holidays => {
         setNationalHolidays(holidays);
-        // 同時存進 Firestore 供其他地方使用
+        // 存入 Firestore
         if (holidays.length > 0) {
-          import('firebase/firestore').then(({ setDoc, doc: fd }) => {
-            setDoc(fd(db, 'settings', `holidays_${month}`), { month, dates: holidays }).catch(() => {});
-          });
+          getDoc(doc(db, 'settings', `holidays_${month}`))
+            .then(() => import('firebase/firestore').then(({ setDoc: sd, doc: fd }) =>
+              sd(fd(db, 'settings', `holidays_${month}`), { month, dates: holidays })
+            )).catch(() => {});
         }
       })
       .catch(() => {
-        // API 失敗時讀 Firestore 備用
         getDoc(doc(db, 'settings', `holidays_${month}`))
           .then(snap => setNationalHolidays(snap.exists() ? (snap.data().dates || []) : []))
           .catch(() => setNationalHolidays([]));
