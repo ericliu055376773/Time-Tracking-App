@@ -36,32 +36,38 @@ function getTotalDays(year, month) {
   return new Date(year, month, 0).getDate(); // e.g. 4月=30, 5月=31
 }
 
-// 從行政院行事曆API取得當月實際上班天數（扣週末＋國定假日）
+// 從行政院行事曆API取得當月資料（上班天數 + 國定假日清單）
 async function fetchWorkingDays(year, month) {
+  const pad = n => String(n).padStart(2, '0');
+  const startDate = `${year}${pad(month)}01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${year}${pad(month)}${pad(lastDay)}`;
   try {
-    const pad = n => String(n).padStart(2, '0');
-    const startDate = `${year}${pad(month)}01`;
-    const lastDay = new Date(year, month, 0).getDate();
-    const endDate = `${year}${pad(month)}${pad(lastDay)}`;
-    // 行政院人事行政總處行事曆 API
-    // isHoliday === '否' 代表正常上班日
     const url = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${startDate},date:lte:${endDate}&limit=50`;
     const res = await fetch(url);
     const json = await res.json();
     const records = json?.result?.records || [];
     if (records.length === 0) throw new Error('no data');
-    // 計算 isHoliday === '否' 的天數（實際上班日）
     const workDays = records.filter(r => r.isHoliday === '否').length;
-    return workDays;
+    // 國定假日：放假（isHoliday=是）且非週六日 → 員工出勤應加倍計薪
+    const nationalHolidays = records
+      .filter(r => {
+        if (r.isHoliday !== '是') return false;
+        const d = r.date; // YYYYMMDD
+        const dt = new Date(`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`);
+        const dow = dt.getDay();
+        return dow !== 0 && dow !== 6; // 非週六日
+      })
+      .map(r => `${r.date.slice(0,4)}-${r.date.slice(4,6)}-${r.date.slice(6,8)}`);
+    return { workDays, nationalHolidays };
   } catch {
-    // API 失敗時，備用：只扣週六日
     let workDays = 0;
     const last = new Date(year, month, 0).getDate();
     for (let d = 1; d <= last; d++) {
       const dow = new Date(year, month - 1, d).getDay();
       if (dow !== 0 && dow !== 6) workDays++;
     }
-    return workDays;
+    return { workDays, nationalHolidays: [] };
   }
 }
 
@@ -100,9 +106,13 @@ export default function SalaryRuleManager() {
     const [y, m] = selectedMonth.split('-').map(Number);
     setWorkingDaysLoading(true);
     setTotalDays(getTotalDays(y, m));
-    fetchWorkingDays(y, m).then(d => {
-      setWorkingDays(d);
+    fetchWorkingDays(y, m).then(({ workDays, nationalHolidays }) => {
+      setWorkingDays(workDays);
       setWorkingDaysLoading(false);
+      // 把國定假日清單存進 Firestore 供薪資計算使用
+      const monthKey = `${String(y)}-${String(m).padStart(2,'0')}`;
+      setDoc(doc(db, 'settings', `holidays_${monthKey}`), { month: monthKey, dates: nationalHolidays })
+        .catch(err => console.error('儲存假日失敗:', err));
     });
   }, [selectedMonth]);
 
