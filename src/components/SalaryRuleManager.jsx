@@ -43,7 +43,7 @@ async function fetchWorkingDays(year, month) {
   const lastDay = new Date(year, month, 0).getDate();
   const endDate = `${year}${pad(month)}${pad(lastDay)}`;
   try {
-    const url = `https://data.gov.tw/api/v2/rest/datastore/TW-2020-006-001@GOV-API-holiday-calendar?filters=date:gte:${startDate},date:lte:${endDate}&limit=50`;
+    const url = `https://data.gov.tw/api/v2/rest/datastore/TW-${year}-006-001@GOV-API-holiday-calendar?filters=date:gte:${startDate},date:lte:${endDate}&limit=50`;
     const res = await fetch(url);
     const json = await res.json();
     const records = json?.result?.records || [];
