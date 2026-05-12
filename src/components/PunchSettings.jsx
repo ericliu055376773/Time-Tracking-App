@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { getDoc, setDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { format } from 'date-fns';
 
 const DEFAULT = {
   maxMissedPunchForFullAtt: 0,   // 允許未補打忘打卡次數（0 = 完全不容許）
@@ -32,6 +33,68 @@ const numInput   = (val, onChange, min = 0, max = 120) => (
     }}
   />
 );
+
+// 手動管理國定假日（當政府 API 失敗時使用）
+function ManualHolidayManager() {
+  const [month, setMonth] = useState(format(new Date(), 'yyyy-MM'));
+  const [dates, setDates] = useState([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (!month) return;
+    getDoc(doc(db, 'settings', `holidays_${month}`))
+      .then(snap => setDates(snap.exists() ? (snap.data().dates || []) : []))
+      .catch(() => setDates([]));
+  }, [month]);
+
+  async function addDate() {
+    const d = input.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || dates.includes(d)) return;
+    const newDates = [...dates, d].sort();
+    setDates(newDates);
+    setInput('');
+    await setDoc(doc(db, 'settings', `holidays_${month}`), { month, dates: newDates });
+  }
+
+  async function removeDate(d) {
+    const newDates = dates.filter(x => x !== d);
+    setDates(newDates);
+    await setDoc(doc(db, 'settings', `holidays_${month}`), { month, dates: newDates });
+  }
+
+  return (
+    <div style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '18px 22px', display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ fontSize: 13, fontWeight: 700 }}>🎌 國定假日手動設定</div>
+      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+        若政府行事曆 API 失敗，可在此手動新增國定假日日期（平日放假才需填，不含週末）
+      </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>月份</span>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)}
+          style={{ padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }} />
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {dates.map(d => (
+          <div key={d} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.35)', borderRadius: 20 }}>
+            <span style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>🎌 {d}</span>
+            <button onClick={() => removeDate(d)} style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: 14, lineHeight: 1 }}>×</button>
+          </div>
+        ))}
+        {dates.length === 0 && <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>尚未設定任何假日</span>}
+      </div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <input type="date" value={input} onChange={e => setInput(e.target.value)}
+          style={{ padding: '7px 10px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }} />
+        <button onClick={addDate} disabled={!input}
+          style={{ padding: '8px 16px', borderRadius: 8, fontWeight: 700, fontSize: 13, background: 'var(--green)', color: '#fff', border: 'none', cursor: 'pointer', opacity: input ? 1 : 0.4 }}>
+          + 新增
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function PunchSettings({ onSaved }) {
   const [settings, setSettings] = useState(DEFAULT);
@@ -118,6 +181,12 @@ export default function PunchSettings({ onSaved }) {
           );
         })()}
       </div>
+
+      {/* 手動新增國定假日（API 備用方案）*/}
+      <ManualHolidayManager />
+
+      {/* 手動新增國定假日（API 備用方案）*/}
+      <ManualHolidayManager />
 
       {/* 儲存 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
