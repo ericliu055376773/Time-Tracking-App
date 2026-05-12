@@ -172,7 +172,7 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
 
       // 國定假日：月薪員工有出勤則額外加一天薪水（雙薪）
       const isNationalHoliday = nationalHolidays.includes(date);
-      const dayHolidayPay = (isNationalHoliday && pairs > 0) ? (dailyBase + dailyMeal) : 0;
+      const dayHolidayPay = (isNationalHoliday && pairs > 0) ? dailyBase : 0; // 國定假日加給只計底薪，不含餐費
 
       // ✅ 月薪制：有完整上下班打卡對（pairs > 0）就算出勤一天
       if (pairs > 0) {
