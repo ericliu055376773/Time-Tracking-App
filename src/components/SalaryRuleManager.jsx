@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAdminNav } from '../contexts/AdminNavContext';
 import { doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore';
+import { fetchTaiwanHolidaysForMonth } from '../utils/fetchHolidays';
 import { db } from '../firebase';
 
 const DEFAULT_RULES = {
@@ -69,6 +70,104 @@ async function fetchWorkingDays(year, month) {
     }
     return { workDays, nationalHolidays: [] };
   }
+}
+
+function HolidayPayManager() {
+  const [month, setMonth] = React.useState(new Date().toISOString().slice(0, 7));
+  const [holidays, setHolidays] = React.useState([]);
+  const [disabled, setDisabled] = React.useState([]);
+  const [loading, setLoading] = React.useState(false);
+  const [saved, setSaved] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!month) return;
+    setLoading(true);
+    Promise.all([
+      getDoc(doc(db, 'settings', `holidays_${month}`)),
+      getDoc(doc(db, 'settings', `holidayPaySettings_${month}`)),
+    ]).then(([hdSnap, paySnap]) => {
+      const stored = hdSnap.exists() ? (hdSnap.data().dates || []) : [];
+      setHolidays(stored);
+      setDisabled(paySnap.exists() ? (paySnap.data().disabledDates || []) : []);
+      if (stored.length === 0) {
+        fetchTaiwanHolidaysForMonth(month).then(apiDates => {
+          if (apiDates.length > 0) {
+            setHolidays(apiDates);
+            setDoc(doc(db, 'settings', `holidays_${month}`), { month, dates: apiDates }).catch(() => {});
+          }
+        });
+      }
+    }).finally(() => setLoading(false));
+  }, [month]);
+
+  async function toggleHoliday(date) {
+    const newDisabled = disabled.includes(date) ? disabled.filter(d => d !== date) : [...disabled, date];
+    setDisabled(newDisabled);
+    await setDoc(doc(db, 'settings', `holidayPaySettings_${month}`), { month, disabledDates: newDisabled });
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function addCustom(date) {
+    if (!date || holidays.includes(date)) return;
+    const next = [...holidays, date].sort();
+    setHolidays(next);
+    await setDoc(doc(db, 'settings', `holidays_${month}`), { month, dates: next });
+  }
+
+  const enabledCount = holidays.filter(d => !disabled.includes(d)).length;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <span style={muteTxt}>月份</span>
+        <input type="month" value={month} onChange={e => setMonth(e.target.value)}
+          style={{ padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }} />
+        {loading && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>載入中...</span>}
+        {saved && <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 600 }}>✓ 已儲存</span>}
+      </div>
+      {holidays.length === 0 && !loading && (
+        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>此月份無國定假日資料</div>
+      )}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {holidays.map(date => {
+          const on = !disabled.includes(date);
+          return (
+            <div key={date} style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 16px', borderRadius: 10,
+              background: on ? 'rgba(34,197,94,0.06)' : 'var(--bg-elevated)',
+              border: `1px solid ${on ? 'rgba(34,197,94,0.3)' : 'var(--border)'}`,
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 16 }}>{on ? '🎌' : '📅'}</span>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: on ? 'var(--green)' : 'var(--text-muted)' }}>{date}</div>
+                  <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{on ? '✓ 給予雙薪' : '✗ 不給雙薪'}</div>
+                </div>
+              </div>
+              <button onClick={() => toggleHoliday(date)} style={{
+                padding: '6px 16px', borderRadius: 20, fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                background: on ? 'var(--green)' : 'var(--bg-surface)',
+                color: on ? '#fff' : 'var(--text-secondary)',
+                border: `1px solid ${on ? 'var(--green)' : 'var(--border)'}`,
+              }}>{on ? '開啟' : '關閉'}</button>
+            </div>
+          );
+        })}
+      </div>
+      {holidays.length > 0 && (
+        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+          共 {holidays.length} 個假日 · {enabledCount} 個給予雙薪 · {holidays.length - enabledCount} 個不計雙薪
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: 10 }}>
+        <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>手動新增假日</span>
+        <input type="date" onChange={e => { addCustom(e.target.value); e.target.value = ''; }}
+          style={{ padding: '6px 10px', border: '1px solid var(--border)', borderRadius: 8, background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 12 }} />
+      </div>
+    </div>
+  );
 }
 
 export default function SalaryRuleManager() {
@@ -142,7 +241,7 @@ export default function SalaryRuleManager() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
         {/* 分類切換 */}
         <div style={{ display: 'flex', gap: 3, background: 'var(--bg-elevated)', borderRadius: 8, padding: 4 }}>
-          {[{ key: 'monthly', label: '月薪制扣款設定' }, { key: 'hourly', label: '時薪制扣款設定' }, { key: 'monthlyOT', label: '月薪薪資補償' }, { key: 'hourlyOT', label: '時薪薪資補償' }].map(tab => (
+          {[{ key: 'monthly', label: '月薪制扣款設定' }, { key: 'hourly', label: '時薪制扣款設定' }, { key: 'monthlyOT', label: '月薪薪資補償' }, { key: 'hourlyOT', label: '時薪薪資補償' }, { key: 'holidays', label: '🎌 國定假日雙薪' }].map(tab => (
             <button key={tab.key} onClick={() => setActiveSection(tab.key)} style={{
               padding: '7px 16px', borderRadius: 6, fontSize: 13, fontWeight: activeSection === tab.key ? 700 : 400,
               background: activeSection === tab.key ? 'var(--amber)' : 'transparent',
@@ -656,6 +755,12 @@ export default function SalaryRuleManager() {
             </div>
           )}
 
+        </div>
+      )}
+      {activeSection === 'holidays' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>針對每個月份的國定假日個別設定是否計入雙薪，適用四周變形工時等特殊勞動條件。</div>
+          <HolidayPayManager />
         </div>
       )}
 
