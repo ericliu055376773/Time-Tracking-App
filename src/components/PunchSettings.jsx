@@ -10,7 +10,7 @@ const DEFAULT = {
 
 const cardStyle = {
   background: 'var(--bg-surface)',
-  border: '1px solid var(--border)',x
+  border: '1px solid var(--border)',
   borderRadius: 12,
   padding: '20px 24px',
   display: 'flex',
