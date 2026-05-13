@@ -95,18 +95,20 @@ export default function AdminDashboard() {
       setMonthSnapshots(map);
       // 同時載入紅利
       const bSnap = await getDocs(query(collection(db, 'bonuses'), where('month', '==', selectedMonth)));
-      // 載入當月國定假日（nager.date API → gov.tw 備用 → Firestore 手動）
+      // 載入當月國定假日 + 雙薪開關設定
       try {
         let holidays = await fetchTaiwanHolidaysForMonth(selectedMonth);
         if (holidays.length === 0) {
-          // 如果 API 都失敗，讀 Firestore 手動設定
           const hdSnap = await getDoc(doc(db, 'settings', `holidays_${selectedMonth}`));
           holidays = hdSnap.exists() ? (hdSnap.data().dates || []) : [];
         } else {
-          // API 成功 → 存快取
           await setDoc(doc(db, 'settings', `holidays_${selectedMonth}`), { month: selectedMonth, dates: holidays });
         }
-        setNationalHolidays(holidays);
+        // 讀取雙薪開關（停用的假日不計雙薪）
+        const paySnap = await getDoc(doc(db, 'settings', `holidayPaySettings_${selectedMonth}`));
+        const disabledDates = paySnap.exists() ? (paySnap.data().disabledDates || []) : [];
+        const enabledHolidays = holidays.filter(d => !disabledDates.includes(d));
+        setNationalHolidays(enabledHolidays);
       } catch { setNationalHolidays([]); }
       const bMap = {};
       bSnap.docs.forEach(d => { bMap[d.data().empId] = d.data().amount ?? 0; });
@@ -1381,19 +1383,75 @@ function SystemSettings() {
   const [appName, setAppNameState] = React.useState('TIMECLOCK');
   const [logoUrl, setLogoUrl] = React.useState('');
   const [saved, setSaved] = React.useState(false);
-  const [logoSaved, setLogoSaved] = React.useState(false);
+  const [logoSaved, setSavedLogo] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const fileRef = React.useRef(null);
 
+  // 薪資相關設定
+  const [srRules, setSrRules] = React.useState({ salaryRevealDay: 30, punchCutoffMinutes: 30, settlementDay: 31, monthlyRestDays: 8 });
+  const [srSaved, setSrSaved] = React.useState(false);
+  const [srEdit, setSrEdit] = React.useState({});
+
   React.useEffect(() => {
-    getDoc(doc(db, 'settings', 'general')).then(snap => {
-      if (snap.exists()) {
-        if (snap.data().appName) setAppNameState(snap.data().appName);
-        if (snap.data().logoUrl) setLogoUrl(snap.data().logoUrl);
+    Promise.all([
+      getDoc(doc(db, 'settings', 'general')),
+      getDoc(doc(db, 'settings', 'salaryRules')),
+    ]).then(([gSnap, srSnap]) => {
+      if (gSnap.exists()) {
+        if (gSnap.data().appName) setAppNameState(gSnap.data().appName);
+        if (gSnap.data().logoUrl) setLogoUrl(gSnap.data().logoUrl);
       }
+      if (srSnap.exists()) setSrRules(r => ({ ...r, ...srSnap.data() }));
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
+
+  async function saveSrRule(key, val) {
+    await setDoc(doc(db, 'settings', 'salaryRules'), { [key]: val }, { merge: true });
+    setSrRules(r => ({ ...r, [key]: val }));
+    setSrEdit(e => ({ ...e, [key]: false }));
+    setSrSaved(true);
+    setTimeout(() => setSrSaved(false), 2000);
+  }
+
+  function SrRow({ label, icon, fieldKey, unit, min = 0, max = 60, desc }) {
+    const [tmp, setTmp] = React.useState(String(srRules[fieldKey] ?? ''));
+    const editing = srEdit[fieldKey];
+    React.useEffect(() => { setTmp(String(srRules[fieldKey] ?? '')); }, [srRules[fieldKey]]);
+    return (
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{icon} {label}</div>
+            {desc && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>{desc}</div>}
+          </div>
+          <button onClick={() => setSrEdit(e => ({ ...e, [fieldKey]: !e[fieldKey] }))}
+            style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+              background: editing ? 'var(--amber)' : 'var(--bg-elevated)',
+              color: editing ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border)', cursor: 'pointer' }}>
+            {editing ? '完成' : '✏️ 編輯'}
+          </button>
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {editing ? (
+            <>
+              <input type="text" inputMode="numeric" value={tmp}
+                onChange={e => setTmp(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={() => { const n = Math.max(min, Math.min(max, Number(tmp))); saveSrRule(fieldKey, n); }}
+                style={{ width: 80, padding: '7px 10px', border: '1px solid var(--amber)', borderRadius: 8,
+                  background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, textAlign: 'center', outline: 'none' }} />
+              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{unit}</span>
+            </>
+          ) : (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {srRules[fieldKey] ?? '-'} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>{unit}</span>
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   async function handleSave() {
     try {
@@ -1457,6 +1515,18 @@ function SystemSettings() {
         </div>
         {saved && <div style={{ fontSize: 12, color: 'var(--green)', marginTop: 8 }}>✓ 已儲存，重新整理後生效</div>}
       </div>
+
+      {/* 薪資相關設定 */}
+      <div style={{ fontSize: 14, fontWeight: 700, marginTop: 8, color: 'var(--text-secondary)' }}>薪資與打卡設定</div>
+      <SrRow label="薪資明細開放日" icon="📅" fieldKey="salaryRevealDay" unit="號（含）之後員工可查看薪資明細" min={1} max={31}
+        desc="員工可以在每月幾號之後查看自己的薪資明細" />
+      <SrRow label="上班打卡截止時間" icon="⏰" fieldKey="punchCutoffMinutes" unit="分鐘（0 = 不鎖定）" min={0} max={120}
+        desc="上班時間過後幾分鐘內未打卡則鎖定，需管理員補打" />
+      <SrRow label="薪資結算日" icon="💰" fieldKey="settlementDay" unit="號（0 = 不提醒）" min={0} max={31}
+        desc="每月幾號後台首頁提醒管理員填寫紅利" />
+      <SrRow label="每月休假天數" icon="🌙" fieldKey="monthlyRestDays" unit="天" min={0} max={20}
+        desc={`月休 ${srRules.monthlyRestDays ?? 8} 天 → 工作天數 ${30 - (srRules.monthlyRestDays ?? 8)} 天 → 日薪基準 ÷ ${30 - (srRules.monthlyRestDays ?? 8)}`} />
+      {srSaved && <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ 已儲存</div>}
 
       {/* Logo 圖片 */}
       <div className="card" style={{ padding: '20px 24px' }}>
