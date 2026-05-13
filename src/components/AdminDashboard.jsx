@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminNav } from '../contexts/AdminNavContext';
 import {
   collection, query, getDocs, where, orderBy,
-  doc, updateDoc, setDoc, getDoc, addDoc, deleteDoc, Timestamp, serverTimestamp
+  doc, updateDoc, setDoc, getDoc, addDoc, deleteDoc, Timestampㄌ, serverTimestamp
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
 import { db, auth, firebaseConfig } from '../firebase';
@@ -1391,17 +1391,21 @@ function SystemSettings() {
   const [srRules, setSrRules] = React.useState({ salaryRevealDay: 30, punchCutoffMinutes: 30, settlementDay: 31, monthlyRestDays: 8 });
   const [srSaved, setSrSaved] = React.useState(false);
   const [srEdit, setSrEdit] = React.useState({});
+  const [psRules, setPsRules] = React.useState({ earlyClockInMinutes: 15 });
+  const [psEdit, setPsEdit] = React.useState({});
 
   React.useEffect(() => {
     Promise.all([
       getDoc(doc(db, 'settings', 'general')),
       getDoc(doc(db, 'settings', 'salaryRules')),
-    ]).then(([gSnap, srSnap]) => {
+      getDoc(doc(db, 'settings', 'punchSettings')),
+    ]).then(([gSnap, srSnap, psSnap]) => {
       if (gSnap.exists()) {
         if (gSnap.data().appName) setAppNameState(gSnap.data().appName);
         if (gSnap.data().logoUrl) setLogoUrl(gSnap.data().logoUrl);
       }
       if (srSnap.exists()) setSrRules(r => ({ ...r, ...srSnap.data() }));
+      if (psSnap.exists()) setPsRules(r => ({ ...r, ...psSnap.data() }));
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -1410,6 +1414,14 @@ function SystemSettings() {
     await setDoc(doc(db, 'settings', 'salaryRules'), { [key]: val }, { merge: true });
     setSrRules(r => ({ ...r, [key]: val }));
     setSrEdit(e => ({ ...e, [key]: false }));
+    setSrSaved(true);
+    setTimeout(() => setSrSaved(false), 2000);
+  }
+
+  async function savePsRule(key, val) {
+    await setDoc(doc(db, 'settings', 'punchSettings'), { [key]: val }, { merge: true });
+    setPsRules(r => ({ ...r, [key]: val }));
+    setPsEdit(e => ({ ...e, [key]: false }));
     setSrSaved(true);
     setTimeout(() => setSrSaved(false), 2000);
   }
@@ -1526,6 +1538,35 @@ function SystemSettings() {
         desc="每月幾號後台首頁提醒管理員填寫紅利" />
       <SrRow label="每月休假天數" icon="🌙" fieldKey="monthlyRestDays" unit="天" min={0} max={20}
         desc={`月休 ${srRules.monthlyRestDays ?? 8} 天 → 工作天數 ${30 - (srRules.monthlyRestDays ?? 8)} 天 → 日薪基準 ÷ ${30 - (srRules.monthlyRestDays ?? 8)}`} />
+      {/* 打卡提前時間（讀寫 punchSettings） */}
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>🕐 提前打卡時間</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>員工可以在上下班時間幾分鐘前打卡</div>
+          </div>
+          <button onClick={() => setPsEdit(e => ({ ...e, early: !e.early }))}
+            style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+              background: psEdit.early ? 'var(--amber)' : 'var(--bg-elevated)',
+              color: psEdit.early ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border)', cursor: 'pointer' }}>
+            {psEdit.early ? '完成' : '✏️ 編輯'}
+          </button>
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {psEdit.early ? (
+            <input type="text" inputMode="numeric"
+              defaultValue={psRules.earlyClockInMinutes ?? 15}
+              onBlur={e => savePsRule('earlyClockInMinutes', Math.max(0, Math.min(60, Number(e.target.value.replace(/[^0-9]/g,'')))))}
+              style={{ width: 80, padding: '7px 10px', border: '1px solid var(--amber)', borderRadius: 8,
+                background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, textAlign: 'center', outline: 'none' }} />
+          ) : (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {psRules.earlyClockInMinutes ?? 15} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>分鐘前可打卡</span>
+            </span>
+          )}
+        </div>
+      </div>
       {srSaved && <div style={{ fontSize: 12, color: 'var(--green)', fontWeight: 600 }}>✓ 已儲存</div>}
 
       {/* Logo 圖片 */}
