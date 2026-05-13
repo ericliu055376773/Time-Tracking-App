@@ -6,7 +6,7 @@ import { fetchTaiwanHolidaysForMonth } from '../utils/fetchHolidays';
 import { db } from '../firebase';
 
 const DEFAULT_RULES = {
-  // 月薪制扣款
+  // 月薪制扣款x
   laborInsurance: 0,
   healthInsurance: 0,
   lateGracePeriod: 0,
@@ -258,81 +258,6 @@ export default function SalaryRuleManager() {
           }}>{saving ? '儲存中...' : '💾 儲存設定'}</button>
         </div>
       </div>
-
-      {/* 薪資明細開放日設定（永遠顯示，不受 Tab 影響） */}
-      <DeductCard title="薪資明細開放日" prefix="📅" color="var(--amber)"
-        isEditing={editing.revealDay} onToggleEdit={() => toggleEdit('revealDay')}>
-        {editing.revealDay ? (
-          <EditRow>
-            <span style={muteTxt}>每月</span>
-            <NumInput value={rules.salaryRevealDay || 30} onChange={v => update('salaryRevealDay', Math.min(31, Math.max(1, v)))} width={70} />
-            <span style={muteTxt}>號（含）之後員工可查看薪資明細與預估實領薪資</span>
-          </EditRow>
-        ) : (
-          <DisplayRow>
-            <span style={muteTxt}>每月</span>
-            <span style={whiteVal}>{rules.salaryRevealDay || 30}</span>
-            <span style={muteTxt}>號後員工可查看薪資明細</span>
-          </DisplayRow>
-        )}
-      </DeductCard>
-
-      {/* 打卡截止時間設定 */}
-      <DeductCard title="上班打卡截止時間" prefix="⏰" color="var(--red)"
-        isEditing={editing.cutoff} onToggleEdit={() => toggleEdit('cutoff')}>
-        {editing.cutoff ? (
-          <EditRow>
-            <span style={muteTxt}>上班時間過後</span>
-            <NumInput value={rules.punchCutoffMinutes ?? 30} onChange={v => update('punchCutoffMinutes', Math.max(0, v))} width={70} />
-            <span style={muteTxt}>分鐘內未打卡則鎖定（0 = 不鎖定，需管理員補打）</span>
-          </EditRow>
-        ) : (
-          <DisplayRow>
-            <span style={muteTxt}>上班後</span>
-            <span style={whiteVal}>{rules.punchCutoffMinutes ?? 30}</span>
-            <span style={muteTxt}>分鐘內未打卡則鎖定</span>
-            {(rules.punchCutoffMinutes ?? 30) === 0
-              ? <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不鎖定）</span>
-              : <span style={{ fontSize: 11, color: 'var(--red)' }}>⚠️ 超時需管理員補打，自動失去全勤</span>}
-          </DisplayRow>
-        )}
-      </DeductCard>
-
-      {/* ── 月休天數設定 ── */}
-      {/* 結算日設定 */}
-      <DeductCard title="薪資結算日" prefix="📅" color="var(--green)"
-        isEditing={editing.settlement} onToggleEdit={() => toggleEdit('settlement')}>
-        {editing.settlement ? (
-          <EditRow>
-            <span style={muteTxt}>每月</span>
-            <NumInput value={rules.settlementDay ?? 31} onChange={v => update('settlementDay', Math.max(0, Math.min(31, v)))} width={70} />
-            <span style={muteTxt}>號為薪資結算日（0 = 不自動提醒）</span>
-          </EditRow>
-        ) : (
-          <DisplayRow>
-            <span style={muteTxt}>每月</span>
-            <span style={whiteVal}>{rules.settlementDay ?? 31}</span>
-            <span style={muteTxt}>號 — 當天後台首頁提醒紅利填寫狀況</span>
-          </DisplayRow>
-        )}
-      </DeductCard>
-
-      <DeductCard title="每月休假天數" prefix="📅" color="var(--text-secondary)"
-        isEditing={editing.restDays} onToggleEdit={() => toggleEdit('restDays')}>
-        {editing.restDays ? (
-          <EditRow>
-            <span style={muteTxt}>每月休假</span>
-            <NumInput value={rules.monthlyRestDays ?? 8} onChange={v => update('monthlyRestDays', Math.max(0, Math.min(20, v)))} width={70} />
-            <span style={muteTxt}>天（工作天數 = 30 - {rules.monthlyRestDays ?? 8} = {30 - (rules.monthlyRestDays ?? 8)} 天）</span>
-          </EditRow>
-        ) : (
-          <DisplayRow>
-            <span style={muteTxt}>月休</span>
-            <span style={whiteVal}>{rules.monthlyRestDays ?? 8}</span>
-            <span style={muteTxt}>天 → 工作天數 {30 - (rules.monthlyRestDays ?? 8)} 天 → 日薪基準 ÷ {30 - (rules.monthlyRestDays ?? 8)}</span>
-          </DisplayRow>
-        )}
-      </DeductCard>
 
       {/* ════ 月薪制扣款設定 ════ */}
       {activeSection === 'monthly' && (
