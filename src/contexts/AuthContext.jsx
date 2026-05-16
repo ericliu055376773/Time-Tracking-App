@@ -15,22 +15,28 @@ export function AuthProvider({ children }) {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
-        // ✅ 管理員：Firebase Auth email 已驗證，不依賴 Firestore 就可進後台
         if (firebaseUser.email === ADMIN_EMAIL) {
-          setProfile({ id: firebaseUser.uid, role: 'admin', name: '管理員', email: ADMIN_EMAIL });
-          // 背景嘗試從 Firestore 同步更完整的資料（失敗不影響登入）
-          getDoc(doc(db, 'users', firebaseUser.uid))
-            .then(snap => {
-              if (snap.exists()) {
-                setProfile({ id: snap.id, ...snap.data() });
-              } else {
-                setDoc(doc(db, 'users', firebaseUser.uid), {
-                  name: '管理員', empId: 'ADMIN', email: ADMIN_EMAIL,
-                  role: 'admin', payType: 'monthly', monthlySalary: 50000,
-                  hourlyRate: 300, overtimeEnabled: false,
-                }).catch(() => {});
-              }
-            }).catch(() => {}); // 失敗靜默，profile 已設好
+          // ✅ 先確保 Firestore 管理員文件存在（isAdmin() 需要這份文件）
+          const adminRef = doc(db, 'users', firebaseUser.uid);
+          const adminData = {
+            name: '管理員', empId: 'ADMIN', email: ADMIN_EMAIL,
+            role: 'admin', payType: 'monthly', monthlySalary: 50000,
+            hourlyRate: 300, overtimeEnabled: false,
+          };
+          try {
+            const snap = await getDoc(adminRef);
+            if (!snap.exists()) {
+              // 文件不存在，建立它（allow create: if request.auth != null）
+              await setDoc(adminRef, adminData);
+              setProfile({ id: firebaseUser.uid, ...adminData });
+            } else {
+              setProfile({ id: snap.id, ...snap.data() });
+            }
+          } catch (err) {
+            console.error('Admin Firestore sync failed:', err);
+            // Firestore 失敗仍允許進後台，但 isAdmin() 查詢可能受限
+            setProfile({ id: firebaseUser.uid, ...adminData });
+          }
         } else {
           try {
             const docRef = doc(db, 'users', firebaseUser.uid);
