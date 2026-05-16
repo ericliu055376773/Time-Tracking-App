@@ -43,29 +43,18 @@ export default function Login() {
   async function quickAdminLogin() {
     reset(); setLoading(true);
     try {
-      let userCred;
+      // 嘗試登入，失敗則建立新帳號
       try {
-        userCred = await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+        await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
       } catch (e) {
         if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password') {
-          userCred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+          await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+          // AuthContext 的 onAuthStateChanged 會自動建立 Firestore 資料
         } else {
           throw e;
         }
       }
-
-      // ✅ 不管 UID 是新或舊，都確保 Firestore 有正確的管理員資料
-      const uid = userCred.user.uid;
-      const profileRef = doc(db, 'users', uid);
-      const profileSnap = await getDoc(profileRef);
-      if (!profileSnap.exists() || profileSnap.data().role !== 'admin') {
-        await setDoc(profileRef, {
-          name: '管理員', empId: 'ADMIN', email: ADMIN_EMAIL,
-          role: 'admin', payType: 'monthly', monthlySalary: 50000,
-          hourlyRate: 300, overtimeEnabled: false,
-          createdAt: serverTimestamp(),
-        }, { merge: true });
-      }
+      // ✅ Firestore 資料由 AuthContext 在 onAuthStateChanged 內處理，避免權限問題
     } catch (e) {
       setError('管理員登入失敗：' + (e.message || e.code));
     }
