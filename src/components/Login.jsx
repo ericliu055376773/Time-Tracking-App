@@ -46,13 +46,25 @@ export default function Login() {
       await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
     } catch (e) {
       if (e.code === 'auth/user-not-found' || e.code === 'auth/invalid-credential') {
-        const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
-        await setDoc(doc(db, 'users', cred.user.uid), {
-          name: '管理員', empId: 'ADMIN', email: ADMIN_EMAIL,
-          role: 'admin', payType: 'monthly', monthlySalary: 50000,
-          hourlyRate: 300, overtimeEnabled: false,
-          createdAt: serverTimestamp(),
-        });
+        try {
+          const cred = await createUserWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+          await setDoc(doc(db, 'users', cred.user.uid), {
+            name: '管理員', empId: 'ADMIN', email: ADMIN_EMAIL,
+            role: 'admin', payType: 'monthly', monthlySalary: 50000,
+            hourlyRate: 300, overtimeEnabled: false,
+            createdAt: serverTimestamp(),
+          });
+          // 建立後再登入一次
+          await signInWithEmailAndPassword(auth, ADMIN_EMAIL, ADMIN_PASSWORD);
+        } catch (e2) {
+          if (e2.code === 'auth/email-already-in-use') {
+            setError('管理員帳號已存在但密碼不符，請聯繫技術支援');
+          } else {
+            setError('管理員登入失敗：' + (e2.message || e2.code));
+          }
+        }
+      } else {
+        setError('登入失敗：' + (e.message || e.code));
       }
     }
     setLoading(false);
