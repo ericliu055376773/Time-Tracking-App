@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useAdminNav } from '../contexts/AdminNavContext';
 import {
   collection, query, getDocs, where, orderBy,
-  doc, updateDoc, setDoc, getDoc, addDoc, deleteDoc, Timestampㄌ, serverTimestamp
+  doc, updateDoc, setDoc, getDoc, addDoc, deleteDoc, Timestamp, serverTimestamp
 } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, updatePassword } from 'firebase/auth';
 import { db, auth, firebaseConfig } from '../firebase';
@@ -1383,7 +1383,7 @@ function SystemSettings() {
   const [appName, setAppNameState] = React.useState('TIMECLOCK');
   const [logoUrl, setLogoUrl] = React.useState('');
   const [saved, setSaved] = React.useState(false);
-  const [logoSaved, setSavedLogo] = React.useState(false);
+  const [logoSaved, setLogoSaved] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
   const fileRef = React.useRef(null);
 
