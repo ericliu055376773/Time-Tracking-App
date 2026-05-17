@@ -16,7 +16,7 @@ import LeaveManager from './LeaveManager';
 import ShiftManager from './ShiftManager';
 import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import PositionManager from './PositionManager';
+import PositionManager from './PositionManager';xa
 import SalaryRuleManager from './SalaryRuleManager';
 import PunchSettings from './PunchSettings';
 import BatchPunchGenerator from './BatchPunchGenerator';
