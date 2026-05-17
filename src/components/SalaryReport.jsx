@@ -378,6 +378,9 @@ export default function SalaryReport({
                       style={{ fontSize: 12, textAlign: 'right' }}
                     >
                       {r.salary > 0 ? fmtMoney(r.salary) : '--'}
+                      {r.isNationalHoliday && r.pairCount > 0 && (
+                        <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--green)' }}>🎌</span>
+                      )}
                     </td>
                   </tr>
                 ))}
