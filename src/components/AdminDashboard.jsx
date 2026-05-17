@@ -16,7 +16,7 @@ import LeaveManager from './LeaveManager';
 import ShiftManager from './ShiftManager';
 import ScheduleManager from './ScheduleManager';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import PositionManager from './PositionManager';xa
+import PositionManager from './PositionManager';
 import SalaryRuleManager from './SalaryRuleManager';
 import PunchSettings from './PunchSettings';
 import BatchPunchGenerator from './BatchPunchGenerator';
@@ -1380,6 +1380,46 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
 }
 
 // ── 系統設定 ─────────────────────────────────────────────────
+// SrRow 獨立元件（不可定義在 SystemSettings 內部，否則違反 React Hooks 規則）
+function SrRow({ label, icon, fieldKey, unit, min = 0, max = 60, desc, rules, edit, setEdit, onSave }) {
+  const [tmp, setTmp] = React.useState(String(rules[fieldKey] ?? ''));
+  const editing = edit[fieldKey];
+  React.useEffect(() => { setTmp(String(rules[fieldKey] ?? '')); }, [rules[fieldKey]]);
+  return (
+    <div className="card" style={{ padding: '16px 20px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>{icon} {label}</div>
+          {desc && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>{desc}</div>}
+        </div>
+        <button onClick={() => setEdit(e => ({ ...e, [fieldKey]: !e[fieldKey] }))}
+          style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+            background: editing ? 'var(--amber)' : 'var(--bg-elevated)',
+            color: editing ? '#fff' : 'var(--text-secondary)',
+            border: '1px solid var(--border)', cursor: 'pointer' }}>
+          {editing ? '完成' : '✏️ 編輯'}
+        </button>
+      </div>
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        {editing ? (
+          <>
+            <input type="text" inputMode="numeric" value={tmp}
+              onChange={e => setTmp(e.target.value.replace(/[^0-9]/g, ''))}
+              onBlur={() => { const n = Math.max(min, Math.min(max, Number(tmp))); onSave(fieldKey, n); }}
+              style={{ width: 80, padding: '7px 10px', border: '1px solid var(--amber)', borderRadius: 8,
+                background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, textAlign: 'center', outline: 'none' }} />
+            <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{unit}</span>
+          </>
+        ) : (
+          <span style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+            {rules[fieldKey] ?? '-'} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>{unit}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SystemSettings() {
   const [appName, setAppNameState] = React.useState('TIMECLOCK');
   const [logoUrl, setLogoUrl] = React.useState('');
@@ -1425,45 +1465,6 @@ function SystemSettings() {
     setPsEdit(e => ({ ...e, [key]: false }));
     setSrSaved(true);
     setTimeout(() => setSrSaved(false), 2000);
-  }
-
-  function SrRow({ label, icon, fieldKey, unit, min = 0, max = 60, desc }) {
-    const [tmp, setTmp] = React.useState(String(srRules[fieldKey] ?? ''));
-    const editing = srEdit[fieldKey];
-    React.useEffect(() => { setTmp(String(srRules[fieldKey] ?? '')); }, [srRules[fieldKey]]);
-    return (
-      <div className="card" style={{ padding: '16px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>{icon} {label}</div>
-            {desc && <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>{desc}</div>}
-          </div>
-          <button onClick={() => setSrEdit(e => ({ ...e, [fieldKey]: !e[fieldKey] }))}
-            style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-              background: editing ? 'var(--amber)' : 'var(--bg-elevated)',
-              color: editing ? '#fff' : 'var(--text-secondary)',
-              border: '1px solid var(--border)', cursor: 'pointer' }}>
-            {editing ? '完成' : '✏️ 編輯'}
-          </button>
-        </div>
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-          {editing ? (
-            <>
-              <input type="text" inputMode="numeric" value={tmp}
-                onChange={e => setTmp(e.target.value.replace(/[^0-9]/g, ''))}
-                onBlur={() => { const n = Math.max(min, Math.min(max, Number(tmp))); saveSrRule(fieldKey, n); }}
-                style={{ width: 80, padding: '7px 10px', border: '1px solid var(--amber)', borderRadius: 8,
-                  background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, textAlign: 'center', outline: 'none' }} />
-              <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{unit}</span>
-            </>
-          ) : (
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {srRules[fieldKey] ?? '-'} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>{unit}</span>
-            </span>
-          )}
-        </div>
-      </div>
-    );
   }
 
   async function handleSave() {
@@ -1532,13 +1533,13 @@ function SystemSettings() {
       {/* 薪資相關設定 */}
       <div style={{ fontSize: 14, fontWeight: 700, marginTop: 8, color: 'var(--text-secondary)' }}>薪資與打卡設定</div>
       <SrRow label="薪資明細開放日" icon="📅" fieldKey="salaryRevealDay" unit="號（含）之後員工可查看薪資明細" min={1} max={31}
-        desc="員工可以在每月幾號之後查看自己的薪資明細" />
+        desc="員工可以在每月幾號之後查看自己的薪資明細" rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
       <SrRow label="上班打卡截止時間" icon="⏰" fieldKey="punchCutoffMinutes" unit="分鐘（0 = 不鎖定）" min={0} max={120}
-        desc="上班時間過後幾分鐘內未打卡則鎖定，需管理員補打" />
+        desc="上班時間過後幾分鐘內未打卡則鎖定，需管理員補打" rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
       <SrRow label="薪資結算日" icon="💰" fieldKey="settlementDay" unit="號（0 = 不提醒）" min={0} max={31}
-        desc="每月幾號後台首頁提醒管理員填寫紅利" />
+        desc="每月幾號後台首頁提醒管理員填寫紅利" rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
       <SrRow label="每月休假天數" icon="🌙" fieldKey="monthlyRestDays" unit="天" min={0} max={20}
-        desc={`月休 ${srRules.monthlyRestDays ?? 8} 天 → 工作天數 ${30 - (srRules.monthlyRestDays ?? 8)} 天 → 日薪基準 ÷ ${30 - (srRules.monthlyRestDays ?? 8)}`} />
+        desc={`月休 ${srRules.monthlyRestDays ?? 8} 天 → 工作天數 ${30 - (srRules.monthlyRestDays ?? 8)} 天 → 日薪基準 ÷ ${30 - (srRules.monthlyRestDays ?? 8)}`} rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
       {/* 打卡提前時間（讀寫 punchSettings） */}
       <div className="card" style={{ padding: '16px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
