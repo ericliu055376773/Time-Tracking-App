@@ -16,7 +16,7 @@ import { differenceInMinutes, format, getDaysInMonth, parseISO } from 'date-fns'
  * @param {Object} profile  - Firestore user profile
  * @param {Array}  leaves   - 當月請假紀錄（可選）
  */
-export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAssignments = {}, month = null, maxMissedPunchForFullAtt = 0, salaryRules = {}, nationalHolidays = []) {
+export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAssignments = {}, month = null, maxMissedPunchForFullAtt = 0, salaryRules = {}, nationalHolidays = [], lateGraceMinutes = 0) {
   if (!punches?.length || !profile) {
     return { dailyRecords: [], totalHours: 0, totalSalary: 0, totalOvertimeHours: 0, salaryBreakdown: null };
   }
@@ -213,7 +213,15 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   const leaveDeduction    = personalDeduction + sickDeduction;
 
   // 底薪全額 + 餐費全額 - 請假扣款 + 加班費（overtime 已在 totalSalary 中累計）
-  totalSalary = monthlySalary + mealAllowance - leaveDeduction + totalSalary;
+  // 遲到扣薪：每分鐘工資 × 有效遲到分鐘（超過寬限才扣）
+  const perMinuteRate = monthlySalary / daysInThisMonth / 8 / 60;
+  const totalEffectiveLateMinutes = dailyRecords.reduce((sum, r) => {
+    const effective = Math.max(0, (r.lateMinutes || 0) - lateGraceMinutes);
+    return sum + effective;
+  }, 0);
+  const lateDeductionAmt = Math.round(totalEffectiveLateMinutes * perMinuteRate);
+
+  totalSalary = monthlySalary + mealAllowance - leaveDeduction - lateDeductionAmt + totalSalary;
 
   // ✅ 排班驗證：取得本月所有排班日，檢查是否有缺勤（有排班但無打卡）
   const empId = profile.id || profile.uid || '';
@@ -272,7 +280,11 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
     sickLeaveDays,                         // 病假天數
     personalDeduction,                     // 事假扣款
     sickDeduction,                         // 病假扣款
-    leaveDeduction,                        // 合計請假扣款
+    leaveDeduction,
+    lateDeductionAmt,
+    totalEffectiveLateMinutes,
+    lateGraceMinutes,
+    perMinuteRate: Math.round(perMinuteRate * 100) / 100,
     overtimePay,
     holidayPay,
     holidayDays,
