@@ -379,7 +379,7 @@ export default function SalaryReport({
                     >
                       {r.salary > 0 ? fmtMoney(r.salary) : '--'}
                       {r.isNationalHoliday && r.pairCount > 0 && (
-                        <span style={{ marginLeft: 4, fontSize: 10, color: 'var(--green)' }}>🎌</span>
+                        <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--green)', fontWeight: 600 }}>🎌 國定假日</span>
                       )}
                     </td>
                   </tr>
