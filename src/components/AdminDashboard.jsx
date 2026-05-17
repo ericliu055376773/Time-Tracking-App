@@ -185,7 +185,7 @@ export default function AdminDashboard() {
     const punches = allPunches.filter(p => p.uid === emp.id);
     const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved');
     const empWithPos = { ...emp, _position: posMap2[emp.positionId] || null };
-    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules, nationalHolidays);
+    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules, nationalHolidays, punchSettings.lateGraceMinutes ?? 5);
     const pos2 = posMap2[emp.positionId];
     const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
     const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
@@ -593,9 +593,9 @@ export default function AdminDashboard() {
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && (() => {
           switch(activeTab) {
-            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} monthSnapshots={monthSnapshots} onSettle={handleSettleMonth} nationalHolidays={nationalHolidays} />;
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} monthSnapshots={monthSnapshots} onSettle={handleSettleMonth} nationalHolidays={nationalHolidays} lateGraceMinutes={punchSettings.lateGraceMinutes ?? 5} />;
             case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
-            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} fetchAll={fetchAll} nationalHolidays={nationalHolidays} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} fetchAll={fetchAll} nationalHolidays={nationalHolidays} lateGraceMinutes={punchSettings.lateGraceMinutes ?? 5} />;
             case '請假審核': return <LeaveManager isAdmin={true} />;
             case 'WiFi 設定': return <WifiSettings />;
             case '職位薪資': return <PositionManager />;
@@ -740,7 +740,7 @@ export default function AdminDashboard() {
   );
 }
 
-function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, monthSnapshots = {}, onSettle, nationalHolidays = [] }) {
+function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, monthSnapshots = {}, onSettle, nationalHolidays = [], lateGraceMinutes = 5 }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const isSettled = Object.keys(monthSnapshots).length > 0;
 
@@ -790,7 +790,7 @@ function SalaryTab({ summaries, month, positions, scheduleAssignments, maxMissed
                   <td style={{ fontFamily: 'var(--mono)', color: totalOvertimeHours > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{totalOvertimeHours > 0 ? fmtHours(totalOvertimeHours) : '--'}</td>
                   <td style={{ fontFamily: 'var(--mono)', color: leaveDeduction > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{leaveDeduction > 0 ? `-${fmtMoney(leaveDeduction)}` : '--'}</td>
                   <td style={{ fontFamily: 'var(--mono)', fontWeight: 700, color: netSalary > 0 ? 'var(--amber)' : 'var(--text-muted)' }}>{fmtMoney(netSalary)}</td>
-                  <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} salaryRules={salaryRules} snapshot={snap || null} nationalHolidays={nationalHolidays} /></td>
+                  <td><SalaryReport employee={{ ...emp, _position: posMap[emp.positionId] || null }} punches={emp.punches} leaves={emp.leaves} month={month} scheduleAssignments={scheduleAssignments} maxMissedPunch={maxMissedPunch} salaryRules={salaryRules} snapshot={snap || null} nationalHolidays={nationalHolidays} lateGraceMinutes={lateGraceMinutes} /></td>
                 </tr>
               );
             })}
@@ -1246,14 +1246,14 @@ function SnapCount({ uid }) {
 }
 
 // ── 員工查詢 Tab ─────────────────────────────────────────────
-function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, fetchAll = () => {}, nationalHolidays = [] }) {
+function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmpId, setQueryEmpId, positions, scheduleAssignments, maxMissedPunch = 0, salaryRules = {}, fetchAll = () => {}, nationalHolidays = [], lateGraceMinutes = 5 }) {
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const emp = employees.find(e => e.id === queryEmpId);
   const punches = allPunches.filter(p => p.uid === queryEmpId);
   const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
   const empWithPos2 = emp ? { ...emp, _position: posMap[emp.positionId] || null } : null;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
-    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch, salaryRules, nationalHolidays)
+    ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch, salaryRules, nationalHolidays, lateGraceMinutes)
     : { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
 
   const leaveDeduction = emp?.payType === 'hourly'
@@ -1369,6 +1369,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
               maxMissedPunch={maxMissedPunch}
               salaryRules={salaryRules}
               nationalHolidays={nationalHolidays}
+              lateGraceMinutes={lateGraceMinutes}
             />
           </div>
 
@@ -1391,7 +1392,7 @@ function SystemSettings() {
   const [srRules, setSrRules] = React.useState({ salaryRevealDay: 30, punchCutoffMinutes: 30, settlementDay: 31, monthlyRestDays: 8 });
   const [srSaved, setSrSaved] = React.useState(false);
   const [srEdit, setSrEdit] = React.useState({});
-  const [psRules, setPsRules] = React.useState({ earlyClockInMinutes: 15 });
+  const [psRules, setPsRules] = React.useState({ earlyClockInMinutes: 15, lateGraceMinutes: 5 });
   const [psEdit, setPsEdit] = React.useState({});
 
   React.useEffect(() => {
@@ -1563,6 +1564,35 @@ function SystemSettings() {
           ) : (
             <span style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
               {psRules.earlyClockInMinutes ?? 15} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>分鐘前可打卡</span>
+            </span>
+          )}
+        </div>
+      </div>
+      {/* 遲到寬限分鐘 */}
+      <div className="card" style={{ padding: '16px 20px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>⏱️ 遲到寬限時間</div>
+            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>遲到幾分鐘以內不扣薪，0 = 遲到即扣</div>
+          </div>
+          <button onClick={() => setPsEdit(e => ({ ...e, grace: !e.grace }))}
+            style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
+              background: psEdit.grace ? 'var(--amber)' : 'var(--bg-elevated)',
+              color: psEdit.grace ? '#fff' : 'var(--text-secondary)',
+              border: '1px solid var(--border)', cursor: 'pointer' }}>
+            {psEdit.grace ? '完成' : '✏️ 編輯'}
+          </button>
+        </div>
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          {psEdit.grace ? (
+            <input type="text" inputMode="numeric"
+              defaultValue={psRules.lateGraceMinutes ?? 5}
+              onBlur={e => savePsRule('lateGraceMinutes', Math.max(0, Math.min(60, Number(e.target.value.replace(/[^0-9]/g,'')))))}
+              style={{ width: 80, padding: '7px 10px', border: '1px solid var(--amber)', borderRadius: 8,
+                background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, textAlign: 'center', outline: 'none' }} />
+          ) : (
+            <span style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
+              {psRules.lateGraceMinutes ?? 5} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>分鐘內遲到不扣薪</span>
             </span>
           )}
         </div>
