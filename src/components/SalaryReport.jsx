@@ -20,6 +20,7 @@ export default function SalaryReport({
   salaryRules = {},
   snapshot = null,
   nationalHolidays = [],  // 父層傳入，若為空則自動抓
+  lateGraceMinutes = 5,
 }) {
   // 若父層沒有傳假日資料，SalaryReport 自行根據 month 呼叫 API
   const [selfHolidays, setSelfHolidays] = useState(null);
@@ -57,7 +58,7 @@ export default function SalaryReport({
   let calcResult = { dailyRecords: [], totalHours: 0, totalOvertimeHours: 0, totalSalary: 0, salaryBreakdown: null };
   let calcError = null;
   try {
-    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch, salaryRules, effectiveHolidays);
+    calcResult = calcSalaryFromPunches(punches, empForCalc, leaves, scheduleAssignments, month, maxMissedPunch, salaryRules, effectiveHolidays, lateGraceMinutes);
   } catch (err) {
     calcError = err.message;
     console.error('SalaryReport calcError:', err);
@@ -413,6 +414,7 @@ export default function SalaryReport({
                     { label: '餐費', sub: `$${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()}（全額）`, amount: salaryBreakdown.mealPay, isDeduction: false },
                     ...(salaryBreakdown.personalDeduction > 0 ? [{ label: `事假扣款（${salaryBreakdown.personalLeaveDays}天）`, sub: `（底薪 $${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} + 餐費 $${(employee._position?.mealAllowance ?? employee.mealAllowance ?? 0).toLocaleString()}）÷ ${salaryBreakdown.workingDaysBase} 天 × ${salaryBreakdown.personalLeaveDays} 天`, amount: -salaryBreakdown.personalDeduction, isDeduction: true }] : []),
                     ...(salaryBreakdown.sickDeduction > 0 ? [{ label: `病假扣款（${salaryBreakdown.sickLeaveDays}天）`, sub: `底薪 ÷ ${salaryBreakdown.workingDaysBase} × 0.5（半薪）+ 餐費 ÷ ${salaryBreakdown.workingDaysBase}（全扣），共 ${salaryBreakdown.sickLeaveDays} 天`, amount: -salaryBreakdown.sickDeduction, isDeduction: true }] : []),
+                    ...(salaryBreakdown.lateDeductionAmt > 0 ? [{ label: `遲到扣薪（有效遲到 ${salaryBreakdown.totalEffectiveLateMinutes} 分鐘）`, sub: `每分鐘工資 = 底薪 $${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ ${salaryBreakdown.workingDaysBase}天 ÷ 8h ÷ 60min = $${salaryBreakdown.perMinuteRate?.toFixed(2)}/min × 有效遲到 ${salaryBreakdown.totalEffectiveLateMinutes} 分（寬限 ${salaryBreakdown.lateGraceMinutes} 分鐘）`, amount: -salaryBreakdown.lateDeductionAmt, isDeduction: true }] : []),
                     ...(salaryBreakdown.holidayPay > 0 ? [{ label: `國定假日加給（${salaryBreakdown.holidayDays}天）`, sub: `底薪 $${(employee._position?.baseSalary ?? employee.monthlySalary ?? 0).toLocaleString()} ÷ ${salaryBreakdown.workingDaysBase} × ${salaryBreakdown.holidayDays} 天`, amount: salaryBreakdown.holidayPay, isDeduction: false }] : []),
                     ...(salaryBreakdown.overtimePay > 0 ? [{ label: '加班費', sub: (() => {
                       const { impliedHourlyRate: hr, totalOt1Mins: m1 = 0, totalOt2Mins: m2 = 0, totalOtMins: tm = 0 } = salaryBreakdown;
