@@ -76,6 +76,19 @@ export default function PunchSettings({ onSaved }) {
         </div>
       </div>
 
+      <div style={card}>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>提前上班打卡時間</div>
+        <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>員工最早可在班別開始幾分鐘前打上班卡。</div>
+        <div style={row}>
+          <span style={muted}>最早提前</span>
+          <input type="number" min={0} max={60} value={early} onChange={e => update('earlyClockInMinutes', Math.max(0, Math.min(60, Number(e.target.value))))} style={inputStyle} />
+          <span style={muted}>分鐘打上班卡</span>
+        </div>
+        <div style={{ fontSize: 11, color: 'var(--text-muted)', padding: '6px 10px', borderRadius: 6, background: 'var(--bg-elevated)' }}>
+          例如 09:00 上班，設 {early} 分鐘 → 最早 {hh}:{mm} 可打卡
+        </div>
+      </div>
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <button onClick={handleSave} disabled={saving} style={{ padding: '11px 28px', borderRadius: 9, fontWeight: 700, fontSize: 14, background: saving ? 'var(--text-muted)' : 'var(--amber)', color: '#fff', border: 'none', cursor: saving ? 'not-allowed' : 'pointer' }}>
           {saving ? '儲存中...' : '儲存設定'}
