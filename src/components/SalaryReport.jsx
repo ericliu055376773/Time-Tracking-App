@@ -341,16 +341,54 @@ export default function SalaryReport({
                 </tr>
               </thead>
               <tbody>
-                {dailyRecords.map((r) => (
-                  <tr key={r.date}>
+                {(() => {
+                  // 計算本月哪些日期有請假
+                  const leaveMap = {};
+                  if (leaves && month) {
+                    const [ly, lm] = month.split('-').map(Number);
+                    const pad = n => String(n).padStart(2, '0');
+                    leaves.forEach(lv => {
+                      // 狀態篩選：rejected 才排除，其他都算
+                      if (lv.status === 'rejected') return;
+                      const lType = lv.type === 'personal' ? '事假'
+                        : lv.type === 'sick' ? '病假'
+                        : lv.type === 'annual' ? '特休' : '請假';
+                      // 支援 Firestore Timestamp、Date、字串
+                      const toDate = v => v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
+                      try {
+                        const start = toDate(lv.startDate);
+                        const end = toDate(lv.endDate || lv.startDate);
+                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+                          const dw = d.getDay();
+                          if (dw === 0 || dw === 6) continue; // 跳過週末
+                          if (d.getFullYear() === ly && d.getMonth() + 1 === lm) {
+                            const key = `${ly}-${pad(lm)}-${pad(d.getDate())}`;
+                            leaveMap[key] = lType;
+                          }
+                        }
+                      } catch(e) { console.warn('leaveMap error', e); }
+                    });
+                  }
+                  // 合併出勤日期和請假日期
+                  const leaveOnlyDates = Object.keys(leaveMap).filter(d => !dailyRecords.find(r => r.date === d)).sort();
+                  const allRows = [
+                    ...dailyRecords.map(r => ({ ...r, leaveLabel: leaveMap[r.date] })),
+                    ...leaveOnlyDates.map(d => ({ date: d, inTime: null, outTime: null, hours: 0, overtimeHours: 0, salary: 0, isLeaveOnly: true, leaveLabel: leaveMap[d] })),
+                  ].sort((a, b) => a.date.localeCompare(b.date));
+                  return allRows.map((r) => (
+                  <tr key={r.date} style={{ background: r.isLeaveOnly ? 'rgba(99,102,241,0.05)' : 'transparent' }}>
                     <td className="mono" style={{ fontSize: 12 }}>
                       {r.date}
                     </td>
                     <td
                       className="mono"
-                      style={{ fontSize: 12, color: 'var(--green)' }}
+                      style={{ fontSize: 12, color: r.isLeaveOnly ? 'var(--text-muted)' : 'var(--green)' }}
                     >
-                      {r.inTime || '--'}
+                      {r.isLeaveOnly ? (
+                        <span style={{ color: 'var(--indigo,#6366f1)', fontWeight: 600, fontSize: 11 }}>
+                          {r.leaveLabel}
+                        </span>
+                      ) : r.inTime || '--'}
                     </td>
                     <td
                       className="mono"
@@ -381,9 +419,13 @@ export default function SalaryReport({
                       {r.isNationalHoliday && r.pairCount > 0 && (
                         <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--green)', fontWeight: 600 }}>🎌 國定假日</span>
                       )}
+                      {r.leaveLabel && !r.isLeaveOnly && (
+                        <span style={{ marginLeft: 6, fontSize: 10, color: '#6366f1', fontWeight: 600 }}>📋 {r.leaveLabel}</span>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  ));
+                })()}
               </tbody>
             </table>
           </div>
