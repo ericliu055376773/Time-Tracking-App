@@ -6,7 +6,7 @@ import { fetchTaiwanHolidaysForMonth } from '../utils/fetchHolidays';
 import { db } from '../firebase';
 
 const DEFAULT_RULES = {
-  // 月薪制扣款x
+  // 月薪制扣款
   laborInsurance: 0,
   healthInsurance: 0,
   lateGracePeriod: 0,
@@ -432,7 +432,7 @@ export default function SalaryRuleManager() {
             )}
           </DeductCard>
 
-          {/* 5. 遲到扣款（月薪） */}
+          {/* 5. 遲到扣款（月薪）— 每分鐘工資自動從底薪計算 */}
           <DeductCard
             title="遲到扣款"
             prefix="－"
@@ -441,31 +441,22 @@ export default function SalaryRuleManager() {
             onToggleEdit={() => toggleEdit('late')}
           >
             {editing.late ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <EditRow>
-                  <span style={muteTxt}>寬限</span>
-                  <NumInput value={rules.lateGracePeriod} onChange={v => update('lateGracePeriod', v)} width={60} />
-                  <span style={muteTxt}>分鐘以內不扣（0 = 無寬限）</span>
-                </EditRow>
-                <EditRow>
-                  <span style={muteTxt}>超過寬限後，每分鐘扣</span>
-                  <NumInput value={rules.lateDeductionPerMinute} onChange={v => update('lateDeductionPerMinute', v)} width={70} />
-                  <span style={muteTxt}>元（0 = 不扣）</span>
-                </EditRow>
-              </div>
+              <EditRow>
+                <span style={muteTxt}>寬限</span>
+                <NumInput value={rules.lateGracePeriod ?? 0} onChange={v => update('lateGracePeriod', v)} width={60} />
+                <span style={muteTxt}>分鐘以內不扣（0 = 無寬限）</span>
+              </EditRow>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <DisplayRow>
                   <span style={muteTxt}>寬限</span>
-                  <span style={whiteVal}>{rules.lateGracePeriod}</span>
+                  <span style={whiteVal}>{rules.lateGracePeriod ?? 0}</span>
                   <span style={muteTxt}>分鐘以內視為準時</span>
-                  {rules.lateGracePeriod === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（無寬限）</span>}
                 </DisplayRow>
                 <DisplayRow>
-                  <span style={muteTxt}>每分鐘扣</span>
-                  <span style={{ ...whiteVal, color: rules.lateDeductionPerMinute > 0 ? 'var(--red)' : 'var(--text-muted)' }}>{rules.lateDeductionPerMinute}</span>
-                  <span style={muteTxt}>元</span>
-                  {rules.lateDeductionPerMinute === 0 && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>（不扣款）</span>}
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    每分鐘扣薪 = 底薪 ÷ 當月天數 ÷ 8h ÷ 60min（自動計算，依職位底薪）
+                  </span>
                 </DisplayRow>
               </div>
             )}
