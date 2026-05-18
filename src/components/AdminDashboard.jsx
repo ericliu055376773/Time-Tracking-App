@@ -185,7 +185,7 @@ export default function AdminDashboard() {
     const punches = allPunches.filter(p => p.uid === emp.id);
     const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved');
     const empWithPos = { ...emp, _position: posMap2[emp.positionId] || null };
-    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules, nationalHolidays, punchSettings.lateGraceMinutes ?? 5);
+    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules, nationalHolidays, salaryRules.lateGracePeriod ?? 0);
     const pos2 = posMap2[emp.positionId];
     const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
     const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
@@ -593,9 +593,9 @@ export default function AdminDashboard() {
         {loading && <div style={{ textAlign: 'center', padding: 60, color: 'var(--text-muted)', fontSize: 12 }}>載入中...</div>}
         {!loading && (() => {
           switch(activeTab) {
-            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} monthSnapshots={monthSnapshots} onSettle={handleSettleMonth} nationalHolidays={nationalHolidays} lateGraceMinutes={punchSettings.lateGraceMinutes ?? 5} />;
+            case '薪資結算': return <SalaryTab summaries={salarySummaries} month={selectedMonth} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} monthSnapshots={monthSnapshots} onSettle={handleSettleMonth} nationalHolidays={nationalHolidays} lateGraceMinutes={salaryRules.lateGracePeriod ?? 0} />;
             case '打卡紀錄': return <RecordsTab punches={allPunches} employees={employees} />;
-            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} fetchAll={fetchAll} nationalHolidays={nationalHolidays} lateGraceMinutes={punchSettings.lateGraceMinutes ?? 5} />;
+            case '員工查詢': return <EmpQueryTab employees={employees} allPunches={allPunches} allLeaves={allLeaves} selectedMonth={selectedMonth} queryEmpId={queryEmpId} setQueryEmpId={setQueryEmpId} positions={positions} scheduleAssignments={scheduleAssignments} maxMissedPunch={punchSettings.maxMissedPunchForFullAtt ?? 0} salaryRules={salaryRules} fetchAll={fetchAll} nationalHolidays={nationalHolidays} lateGraceMinutes={salaryRules.lateGracePeriod ?? 0} />;
             case '請假審核': return <LeaveManager isAdmin={true} />;
             case 'WiFi 設定': return <WifiSettings />;
             case '職位薪資': return <PositionManager />;
