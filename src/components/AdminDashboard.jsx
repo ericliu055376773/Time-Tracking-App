@@ -1534,41 +1534,12 @@ function SystemSettings() {
       <div style={{ fontSize: 14, fontWeight: 700, marginTop: 8, color: 'var(--text-secondary)' }}>薪資與打卡設定</div>
       <SrRow label="薪資明細開放日" icon="📅" fieldKey="salaryRevealDay" unit="號（含）之後員工可查看薪資明細" min={1} max={31}
         desc="員工可以在每月幾號之後查看自己的薪資明細" rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
-      <SrRow label="上班打卡截止時間" icon="⏰" fieldKey="punchCutoffMinutes" unit="分鐘（0 = 不鎖定）" min={0} max={120}
-        desc="上班時間過後幾分鐘內未打卡則鎖定，需管理員補打" rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
+
       <SrRow label="薪資結算日" icon="💰" fieldKey="settlementDay" unit="號（0 = 不提醒）" min={0} max={31}
         desc="每月幾號後台首頁提醒管理員填寫紅利" rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
       <SrRow label="每月休假天數" icon="🌙" fieldKey="monthlyRestDays" unit="天" min={0} max={20}
         desc={`月休 ${srRules.monthlyRestDays ?? 8} 天 → 工作天數 ${30 - (srRules.monthlyRestDays ?? 8)} 天 → 日薪基準 ÷ ${30 - (srRules.monthlyRestDays ?? 8)}`} rules={srRules} edit={srEdit} setEdit={setSrEdit} onSave={saveSrRule} />
-      {/* 打卡提前時間（讀寫 punchSettings） */}
-      <div className="card" style={{ padding: '16px 20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700 }}>🕐 提前打卡時間</div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 3 }}>員工可以在上下班時間幾分鐘前打卡</div>
-          </div>
-          <button onClick={() => setPsEdit(e => ({ ...e, early: !e.early }))}
-            style={{ padding: '5px 12px', borderRadius: 7, fontSize: 12, fontWeight: 600,
-              background: psEdit.early ? 'var(--amber)' : 'var(--bg-elevated)',
-              color: psEdit.early ? '#fff' : 'var(--text-secondary)',
-              border: '1px solid var(--border)', cursor: 'pointer' }}>
-            {psEdit.early ? '完成' : '✏️ 編輯'}
-          </button>
-        </div>
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-          {psEdit.early ? (
-            <input type="text" inputMode="numeric"
-              defaultValue={psRules.earlyClockInMinutes ?? 15}
-              onBlur={e => savePsRule('earlyClockInMinutes', Math.max(0, Math.min(60, Number(e.target.value.replace(/[^0-9]/g,'')))))}
-              style={{ width: 80, padding: '7px 10px', border: '1px solid var(--amber)', borderRadius: 8,
-                background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 15, fontWeight: 700, textAlign: 'center', outline: 'none' }} />
-          ) : (
-            <span style={{ fontFamily: 'var(--mono)', fontSize: 18, fontWeight: 700, color: 'var(--text-primary)' }}>
-              {psRules.earlyClockInMinutes ?? 15} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-secondary)' }}>分鐘前可打卡</span>
-            </span>
-          )}
-        </div>
-      </div>
+
       {/* 遲到寬限分鐘 */}
       <div className="card" style={{ padding: '16px 20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
