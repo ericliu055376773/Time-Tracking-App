@@ -427,7 +427,13 @@ export default function SalaryReport({
                       return `換算時薪 $${hr}/hr（底薪 ÷ 當月天數${salaryBreakdown.workingDaysBase}天 ÷ 8h）｜總加班 ${tm} 分鐘｜${parts.join('｜')}`;
                     })(), amount: salaryBreakdown.overtimePay, isDeduction: false }] : []),
                     (() => {
-                      const violations = [salaryBreakdown.hasLate&&'有遲到', salaryBreakdown.hasLeave&&'有請假', salaryBreakdown.hasMissedPunch&&'有忘打卡', salaryBreakdown.hasAbsent&&'有缺勤班次'].filter(Boolean).join('、');
+                      const bd = salaryBreakdown;
+                      const violations = [
+                        bd.hasLate        && `本月有遲到`,
+                        bd.hasLeave       && `有請假（病假/事假）`,
+                        bd.hasMissedPunch && `有忘打卡未補打`,
+                        bd.hasAbsent      && `有未完整出勤（忘打卡或缺勤）`,
+                      ].filter(Boolean).join('、');
                       const fullLabel = `全勤獎金 ${salaryBreakdown.hasFullAttendance ? '✓' : '✗'}`;
                       const fullSub = salaryBreakdown.hasFullAttendance ? '達成全勤條件' : `未達標：${violations}`;
                       return { label: fullLabel, sub: fullSub, amount: salaryBreakdown.fullAttendancePay, isDeduction: false, dim: !salaryBreakdown.hasFullAttendance };
