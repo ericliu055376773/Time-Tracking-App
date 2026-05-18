@@ -134,9 +134,10 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
       }
       // hasMakeup = 管理員已補打，視為處理完畢，不計次數
 
-      const dayLate = hasMakeup
-        ? 0  // 補打卡日：遲到歸零
-        : ins.reduce((acc, p) => acc + (p.lateMinutes || 0), 0);
+      // dayLateRaw：實際遲到分鐘（扣薪用，不受補打影響）
+      const dayLateRaw = ins.reduce((acc, p) => acc + (p.lateMinutes || 0), 0);
+      // dayLate：全勤判定用，補打視為準時
+      const dayLate = hasMakeup ? 0 : dayLateRaw;
       if (dayLate > 0) hasLate = true;
 
       let dayMinutes = 0;
@@ -193,7 +194,7 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
         salary: dayBaseSalary + dayOvertimePay + (isNationalHoliday && pairs > 0 ? dayHolidayPay : 0),
         isNationalHoliday,
         holidayPay: Math.round(isNationalHoliday && pairs > 0 ? dayHolidayPay : 0),
-        lateMinutes: dayLate,
+        lateMinutes: dayLateRaw,
         shiftId: ins[0]?.shiftId || '',
         missedPunch: ins.length !== outs.length && !isClockedIn,
       });
