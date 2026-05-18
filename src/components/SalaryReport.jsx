@@ -342,32 +342,39 @@ export default function SalaryReport({
               </thead>
               <tbody>
                 {(() => {
-                  // 計算本月哪些日期有請假
+                  // 計算本月哪些日期有請假（用字串格式避免時區問題）
                   const leaveMap = {};
                   if (leaves && month) {
-                    const [ly, lm] = month.split('-').map(Number);
                     const pad = n => String(n).padStart(2, '0');
+                    // Firestore Timestamp → YYYY-MM-DD 字串（用本地時間）
+                    const toYMD = v => {
+                      if (!v) return null;
+                      const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
+                      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+                    };
                     leaves.forEach(lv => {
-                      // 狀態篩選：rejected 才排除，其他都算
                       if (lv.status === 'rejected') return;
                       const lType = lv.type === 'personal' ? '事假'
                         : lv.type === 'sick' ? '病假'
                         : lv.type === 'annual' ? '特休' : '請假';
-                      // 支援 Firestore Timestamp、Date、字串
-                      const toDate = v => v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
                       try {
-                        const start = toDate(lv.startDate);
-                        const end = toDate(lv.endDate || lv.startDate);
-                        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-                          const dw = d.getDay();
-                          if (dw === 0 || dw === 6) continue; // 跳過週末
-                          if (d.getFullYear() === ly && d.getMonth() + 1 === lm) {
-                            const key = `${ly}-${pad(lm)}-${pad(d.getDate())}`;
-                            leaveMap[key] = lType;
+                        const startYMD = toYMD(lv.startDate);
+                        const endYMD = toYMD(lv.endDate || lv.startDate);
+                        if (!startYMD) return;
+                        // 逐日列舉，只比對字串
+                        const cur = new Date(startYMD + 'T00:00:00');
+                        const fin = new Date((endYMD || startYMD) + 'T00:00:00');
+                        while (cur <= fin) {
+                          const dw = cur.getDay();
+                          if (dw !== 0 && dw !== 6) { // 跳過週末
+                            const key = `${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`;
+                            if (key.startsWith(month)) leaveMap[key] = lType;
                           }
+                          cur.setDate(cur.getDate() + 1);
                         }
-                      } catch(e) { console.warn('leaveMap error', e); }
+                      } catch(e) { console.warn('leaveMap error', lv, e); }
                     });
+                    console.log('[SalaryReport] leaveMap:', leaveMap);
                   }
                   // 合併出勤日期和請假日期
                   const leaveOnlyDates = Object.keys(leaveMap).filter(d => !dailyRecords.find(r => r.date === d)).sort();
