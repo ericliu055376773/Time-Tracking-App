@@ -103,29 +103,40 @@ export default function SalaryReport({
   function handlePrint() {
     const content = printRef.current?.innerHTML;
     if (!content) return;
-    const w = window.open('', '_blank');
-    w.document.write(`<!DOCTYPE html><html lang="zh-TW"><head>
+    // 使用 iframe 避免彈出視窗攔截
+    const iframe = document.createElement('iframe');
+    iframe.style.cssText = 'position:fixed;left:-9999px;top:-9999px;width:800px;height:1200px;border:none;';
+    document.body.appendChild(iframe);
+    const doc = iframe.contentDocument || iframe.contentWindow.document;
+    doc.open();
+    doc.write(`<!DOCTYPE html><html lang="zh-TW"><head>
       <meta charset="UTF-8">
       <title>薪資單 ${employee.name} ${month}</title>
-      <link rel="preconnect" href="https://fonts.googleapis.com">
       <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500&family=IBM+Plex+Sans+TC:wght@300;400;500;600&display=swap" rel="stylesheet">
       <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: 'IBM Plex Sans TC', sans-serif; background: #fff; color: #111; padding: 40px; }
+        body { font-family: 'IBM Plex Sans TC', sans-serif; background: #fff; color: #111; padding: 32px; font-size: 13px; }
         .mono { font-family: 'IBM Plex Mono', monospace; }
-        table { width: 100%; border-collapse: collapse; }
-        th { text-align: left; font-size: 11px; font-weight: 600; color: #666; border-bottom: 1px solid #ddd; padding: 8px 12px; letter-spacing: 0.06em; text-transform: uppercase; }
-        td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #f0f0f0; }
-        @media print {
-          body { padding: 20px; }
-          button { display: none !important; }
-        }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+        th { text-align: left; font-size: 10px; font-weight: 600; color: #888; border-bottom: 2px solid #ddd; padding: 6px 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+        td { padding: 7px 10px; font-size: 12px; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+        h1 { font-size: 22px; font-weight: 700; margin-bottom: 2px; }
+        h2 { font-size: 13px; font-weight: 600; margin: 20px 0 10px; letter-spacing: 0.04em; text-transform: uppercase; color: #555; }
+        .label { font-size: 11px; color: #888; }
+        .amount { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+        .total { font-size: 22px; font-weight: 700; font-family: 'IBM Plex Mono', monospace; }
+        .deduction { color: #e53e3e; }
+        .dimmed { color: #aaa; }
+        @page { size: A4; margin: 16mm; }
+        @media print { body { padding: 0; } }
       </style>
     </head><body>${content}</body></html>`);
-    w.document.close();
+    doc.close();
     setTimeout(() => {
-      w.print();
-    }, 500);
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => document.body.removeChild(iframe), 2000);
+    }, 800);
   }
 
   return (
@@ -152,7 +163,7 @@ export default function SalaryReport({
           maxHeight: '90vh',
           overflowY: 'auto',
           margin: '60px 20px 20px',
-          marginTop: 'max(60px, env(safe-area-inset-top, 20px))',
+          marginTop: 20,
         }}
         className="fade-in"
       >
