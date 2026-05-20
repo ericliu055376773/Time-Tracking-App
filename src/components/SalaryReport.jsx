@@ -354,19 +354,30 @@ export default function SalaryReport({
                     };
                     leaves.forEach(lv => {
                       if (lv.status === 'rejected') return;
+                      // 支援中文 type（Bot）和英文 type（一般假單）
                       const lType = lv.type === 'personal' ? '事假'
                         : lv.type === 'sick' ? '病假'
-                        : lv.type === 'annual' ? '特休' : '請假';
+                        : lv.type === 'annual' ? '特休'
+                        : ['事假','病假','特休'].includes(lv.type) ? lv.type
+                        : '請假';
                       try {
-                        const startYMD = toYMD(lv.startDate);
-                        const endYMD = toYMD(lv.endDate || lv.startDate);
+                        // Bot 用 date 欄位（字串），一般假單用 startDate/endDate（Timestamp）
+                        let startYMD, endYMD;
+                        if (lv.date && typeof lv.date === 'string') {
+                          // Bot 格式：date = "2026-05-06"
+                          startYMD = lv.date;
+                          endYMD = lv.date;
+                        } else {
+                          // 一般假單格式：startDate/endDate = Timestamp
+                          startYMD = toYMD(lv.startDate);
+                          endYMD = toYMD(lv.endDate || lv.startDate);
+                        }
                         if (!startYMD) return;
-                        // 逐日列舉，只比對字串
                         const cur = new Date(startYMD + 'T00:00:00');
                         const fin = new Date((endYMD || startYMD) + 'T00:00:00');
                         while (cur <= fin) {
                           const dw = cur.getDay();
-                          if (dw !== 0 && dw !== 6) { // 跳過週末
+                          if (dw !== 0 && dw !== 6) {
                             const key = `${cur.getFullYear()}-${pad(cur.getMonth()+1)}-${pad(cur.getDate())}`;
                             if (key.startsWith(month)) leaveMap[key] = lType;
                           }
