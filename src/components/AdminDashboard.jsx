@@ -19,7 +19,7 @@ import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import PositionManager from './PositionManager';
 import SalaryRuleManager from './SalaryRuleManager';
 import PunchSettings from './PunchSettings';
-import BatchPunchGenerator from './BatchPunchGenerator';
+import BatchPunchGenerator from './BatchPunchGenerator';5y5
 import AnnualLeaveManager from './AnnualLeaveManager';
 const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
