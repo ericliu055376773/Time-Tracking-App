@@ -263,12 +263,31 @@ export default function AdminDashboard() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // ── 假單月份篩選工具（相容 BatchPunchGenerator 字串格式 & LeaveManager Timestamp 格式）──
+  const leaveInMonth = (l, targetMonth) => {
+    if (!targetMonth) return true;
+    const toYMD = v => {
+      if (!v) return null;
+      const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    };
+    if (l.date && typeof l.date === 'string') return l.date.startsWith(targetMonth);
+    const start = toYMD(l.startDate);
+    const end   = toYMD(l.endDate || l.startDate);
+    if (!start) return false;
+    const monthStart = targetMonth + '-01';
+    const lastDay = new Date(Number(targetMonth.slice(0,4)), Number(targetMonth.slice(5,7)), 0).getDate();
+    const monthEnd = `${targetMonth}-${String(lastDay).padStart(2,'0')}`;
+    return start <= monthEnd && end >= monthStart;
+  };
+
   const posMap2 = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const salarySummaries = employees.map(emp => {
     const punches = allPunches.filter(p => p.uid === emp.id);
-    const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved');
+    // ✅ 只傳當月假單，避免歷史假單跨月重複扣款
+    const leaves  = allLeaves.filter(l => l.uid === emp.id && l.status === 'approved' && leaveInMonth(l, selectedMonth));
     const empWithPos = { ...emp, _position: posMap2[emp.positionId] || null };
-    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, [], scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules, nationalHolidays, salaryRules.lateGracePeriod ?? 0);
+    const { totalHours, totalOvertimeHours, totalSalary } = calcSalaryFromPunches(punches, empWithPos, leaves, scheduleAssignments, selectedMonth, punchSettings.maxMissedPunchForFullAtt ?? 0, salaryRules, nationalHolidays, salaryRules.lateGracePeriod ?? 0);
     const pos2 = posMap2[emp.positionId];
     const baseSal = pos2?.baseSalary ?? emp.monthlySalary ?? 0;
     const mealSal = pos2?.mealAllowance ?? emp.mealAllowance ?? 0;
@@ -1336,7 +1355,10 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
   const posMap = Object.fromEntries((positions||[]).map(p => [p.id, p]));
   const emp = employees.find(e => e.id === queryEmpId);
   const punches = allPunches.filter(p => p.uid === queryEmpId);
-  const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved');
+  // ✅ 只取當月核准假單，避免歷史假單跨月影響薪資計算
+  const toYMD = v => { if (!v) return null; const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+  const leaveInMonthFn = (l, m) => { if (!m) return true; if (l.date && typeof l.date === 'string') return l.date.startsWith(m); const s = toYMD(l.startDate); const e = toYMD(l.endDate || l.startDate); if (!s) return false; const ms = m+'-01'; const ld = new Date(Number(m.slice(0,4)), Number(m.slice(5,7)), 0).getDate(); const me = `${m}-${String(ld).padStart(2,'0')}`; return s <= me && e >= ms; };
+  const leaves = allLeaves.filter(l => l.uid === queryEmpId && l.status === 'approved' && leaveInMonthFn(l, selectedMonth));
   const empWithPos2 = emp ? { ...emp, _position: posMap[emp.positionId] || null } : null;
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = queryEmpId
     ? calcSalaryFromPunches(punches, empWithPos2, leaves, scheduleAssignments, selectedMonth, maxMissedPunch, salaryRules, nationalHolidays, lateGraceMinutes)
@@ -1449,7 +1471,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
             <SalaryReport
               employee={{ ...emp, _position: posMap[emp.positionId] || null }}
               punches={allPunches.filter(p => p.uid === queryEmpId)}
-              leaves={allLeaves.filter(l => l.uid === queryEmpId)}
+              leaves={allLeaves.filter(l => l.uid === queryEmpId && leaveInMonthFn(l, selectedMonth))}
               month={selectedMonth}
               scheduleAssignments={scheduleAssignments}
               maxMissedPunch={maxMissedPunch}
