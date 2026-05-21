@@ -11,6 +11,28 @@
 import { differenceInMinutes, format, getDaysInMonth, parseISO } from 'date-fns';
 
 /**
+ * 統一假單類型：相容兩種儲存格式
+ *  - BatchPunchGenerator：{ type: '事假' | '病假' | '特休' }（中文）
+ *  - LeaveManager：{ leaveType: 'personal' | 'sick' | 'annual' | 'official' | 'overtime_comp' }（英文 ID）
+ * @returns {string} 中文假別，例如 '事假'、'病假'、'特休'
+ */
+function resolveLeaveType(l) {
+  // BatchPunchGenerator 格式（中文 type）
+  if (l.type === '事假' || l.type === 'personal') return '事假';
+  if (l.type === '病假' || l.type === 'sick')     return '病假';
+  if (l.type === '特休' || l.type === 'annual')   return '特休';
+  if (l.type === '公假' || l.type === 'official') return '公假';
+  if (l.type === '補休' || l.type === 'overtime_comp') return '補休';
+  // LeaveManager 格式（英文 leaveType）
+  if (l.leaveType === 'personal')      return '事假';
+  if (l.leaveType === 'sick')          return '病假';
+  if (l.leaveType === 'annual')        return '特休';
+  if (l.leaveType === 'official')      return '公假';
+  if (l.leaveType === 'overtime_comp') return '補休';
+  return l.type || l.leaveType || '';
+}
+
+/**
  * 從打卡紀錄計算每日工時與薪資
  * @param {Array}  punches  - Firestore punch documents
  * @param {Object} profile  - Firestore user profile
@@ -202,11 +224,15 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
 
   const approvedLeaves = leaves.filter(l => l.status === 'approved');
   // ✅ 全勤只受病假、事假影響；特休、婚假、喪假不扣全勤
-  const hasLeave = approvedLeaves.some(l => l.type === "病假" || l.type === "事假");
+  // 相容 BatchPunchGenerator（type 中文）與 LeaveManager（leaveType 英文）兩種格式
+  const hasLeave = approvedLeaves.some(l => {
+    const t = resolveLeaveType(l);
+    return t === '病假' || t === '事假';
+  });
 
   // ── 月薪固定全額，僅事假/病假扣款，特休不扣 ──────────────────
-  const personalLeaveDays = approvedLeaves.filter(l => l.type === '事假').length;
-  const sickLeaveDays     = approvedLeaves.filter(l => l.type === '病假').length;
+  const personalLeaveDays = approvedLeaves.filter(l => resolveLeaveType(l) === '事假').length;
+  const sickLeaveDays     = approvedLeaves.filter(l => resolveLeaveType(l) === '病假').length;
   // 事假：底薪全扣 + 餐費全扣
   const personalDeduction = Math.round((dailyBase + dailyMeal) * personalLeaveDays);
   // 病假：底薪半扣 + 餐費全扣
