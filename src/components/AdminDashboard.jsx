@@ -21,11 +21,83 @@ import SalaryRuleManager from './SalaryRuleManager';
 import PunchSettings from './PunchSettings';
 import BatchPunchGenerator from './BatchPunchGenerator';
 import AnnualLeaveManager from './AnnualLeaveManager';
-const EMPTY_ADD = {
+const EMPTY_ADD = {x
   name: '', positionId: '', pin: '', email: '',
   role: 'employee', payType: 'hourly',
   hourlyRate: 180, monthlySalary: 30000, mealAllowance: 0, overtimeEnabled: false,
 };
+
+// ── 假單管理元件 ─────────────────────────────────────────────
+function LeaveRecordAdmin({ employees, allLeaves, fetchAll }) {
+  const [selEmp, setSelEmp] = React.useState('');
+  const [deleting, setDeleting] = React.useState(null);
+
+  const empLeaves = allLeaves
+    .filter(l => !selEmp || l.uid === selEmp)
+    .sort((a, b) => {
+      const da = l => l.date || l.startDate?.toDate?.()?.toISOString?.()?.slice(0,10) || '';
+      return da(a).localeCompare(da(b));
+    });
+
+  async function handleDelete(leave) {
+    if (!window.confirm(`確定要刪除 ${leave.userName || ''} 的 ${leave.type} (${leave.date || ''}) 假單？`)) return;
+    setDeleting(leave.id);
+    try {
+      await import('firebase/firestore').then(({ deleteDoc, doc: fd }) =>
+        deleteDoc(fd(db, 'leaves', leave.id))
+      );
+      fetchAll();
+    } catch (e) { alert('刪除失敗：' + e.message); }
+    setDeleting(null);
+  }
+
+  const typeLabel = t => t === 'personal' ? '事假' : t === 'sick' ? '病假' : t === 'annual' ? '特休' : (t || '請假');
+  const dateStr = l => l.date || (l.startDate?.toDate ? l.startDate.toDate().toISOString().slice(0,10) : '') || '—';
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>篩選員工</span>
+        <select value={selEmp} onChange={e => setSelEmp(e.target.value)}
+          style={{ padding: '7px 12px', border: '1px solid var(--border)', borderRadius: 8,
+            background: 'var(--bg-elevated)', color: 'var(--text-primary)', fontSize: 13 }}>
+          <option value="">全部員工</option>
+          {employees.map(e => <option key={e.id} value={e.id}>{e.name}</option>)}
+        </select>
+        <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>共 {empLeaves.length} 筆假單</span>
+      </div>
+
+      {empLeaves.length === 0 ? (
+        <div style={{ fontSize: 13, color: 'var(--text-muted)', padding: 20, textAlign: 'center' }}>無假單紀錄</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {empLeaves.map(l => (
+            <div key={l.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '10px 16px', borderRadius: 10, background: 'var(--bg-surface)',
+              border: '1px solid var(--border)' }}>
+              <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)' }}>{dateStr(l)}</span>
+                <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 12,
+                  background: l.type === 'sick' || l.type === '病假' ? 'rgba(99,102,241,0.12)' : 'rgba(245,158,11,0.12)',
+                  color: l.type === 'sick' || l.type === '病假' ? '#6366f1' : 'var(--amber)', fontWeight: 600 }}>
+                  {typeLabel(l.type)}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{l.userName || '—'}</span>
+                {l.reason && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.reason}</span>}
+              </div>
+              <button onClick={() => handleDelete(l)} disabled={deleting === l.id}
+                style={{ padding: '5px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
+                  background: 'rgba(229,62,62,0.1)', color: 'var(--red)',
+                  border: '1px solid rgba(229,62,62,0.3)', cursor: 'pointer' }}>
+                {deleting === l.id ? '刪除中...' : '🗑️ 刪除'}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function AdminDashboard() {
   const [employees, setEmployees] = useState([]);
@@ -602,6 +674,7 @@ export default function AdminDashboard() {
             case '班別設定': return <ShiftManager />;
             case '一般設定': return <SystemSettings />;
             case '打卡設定': return <PunchSettings onSaved={fetchAll} />;
+            case '假單管理': return <LeaveRecordAdmin employees={employees} allLeaves={allLeaves} fetchAll={fetchAll} />;
             case '月薪算法': return <SalaryRuleManager />;
             case '排班管理': return <ScheduleManager />;
             case '特休天數': return <AnnualLeaveManager subTab="特休天數" />;
