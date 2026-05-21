@@ -21,7 +21,7 @@ import SalaryRuleManager from './SalaryRuleManager';
 import PunchSettings from './PunchSettings';
 import BatchPunchGenerator from './BatchPunchGenerator';
 import AnnualLeaveManager from './AnnualLeaveManager';
-const EMPTY_ADD = {x
+const EMPTY_ADD = {
   name: '', positionId: '', pin: '', email: '',
   role: 'employee', payType: 'hourly',
   hourlyRate: 180, monthlySalary: 30000, mealAllowance: 0, overtimeEnabled: false,
