@@ -114,7 +114,7 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
   const mealAllowance = pos?.mealAllowance ?? profile.mealAllowance ?? 0;
   const FULL_ATTENDANCE_BONUS = 2000;
   const STANDARD_MINS = 8 * 60;
-  const OT_UNIT = 10;
+  const OT_UNIT = 1; // 以1分鐘為單位計算加班（精確到分）
   const OT_RATE_1 = 1.34;
   const OT_RATE_2 = 1.67;
 
