@@ -222,7 +222,36 @@ export function calcSalaryFromPunches(punches, profile, leaves = [], scheduleAss
       });
     });
 
-  const approvedLeaves = leaves.filter(l => l.status === 'approved');
+  /**
+   * 判斷假單是否落在指定月份（yyyy-MM）內
+   * 相容兩種格式：
+   *  - BatchPunchGenerator: { date: 'yyyy-MM-dd' }（字串）
+   *  - LeaveManager: { startDate: Timestamp, endDate: Timestamp }
+   */
+  const leaveInMonth = (l, targetMonth) => {
+    if (!targetMonth) return true; // 無月份限制時全部納入
+    const toYMD = v => {
+      if (!v) return null;
+      const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v));
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    // BatchPunchGenerator 格式：單一日期字串
+    if (l.date && typeof l.date === 'string') return l.date.startsWith(targetMonth);
+    // LeaveManager 格式：startDate / endDate Timestamp
+    const start = toYMD(l.startDate);
+    const end   = toYMD(l.endDate || l.startDate);
+    if (!start) return false;
+    // 假單區間與目標月份有交集即計入
+    const monthStart = targetMonth + '-01';
+    const [y, m] = targetMonth.split('-').map(Number);
+    const lastDay = getDaysInMonth(parseISO(targetMonth + '-01'));
+    const monthEnd = `${targetMonth}-${String(lastDay).padStart(2, '0')}`;
+    return start <= monthEnd && end >= monthStart;
+  };
+
+  // 僅計算當月核准假單（避免跨月假單被重複扣款）
+  const approvedLeaves = leaves.filter(l => l.status === 'approved' && leaveInMonth(l, monthPrefix2));
+
   // ✅ 全勤只受病假、事假影響；特休、婚假、喪假不扣全勤
   // 相容 BatchPunchGenerator（type 中文）與 LeaveManager（leaveType 英文）兩種格式
   const hasLeave = approvedLeaves.some(l => {
