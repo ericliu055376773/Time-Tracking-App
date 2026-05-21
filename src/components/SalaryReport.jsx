@@ -66,8 +66,19 @@ export default function SalaryReport({
   const { dailyRecords, totalHours, totalOvertimeHours, totalSalary, salaryBreakdown } = calcResult;
 
   // 計算請假扣薪（時薪制才扣，月薪制已在計算中處理）
+  // ✅ 只計當月假單，避免歷史假單跨月重複扣款
+  const leaveInMonthSR = (l, m) => {
+    if (!m) return true;
+    const toYMD = v => { if (!v) return null; const d = v?.toDate ? v.toDate() : (v instanceof Date ? v : new Date(v)); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
+    if (l.date && typeof l.date === 'string') return l.date.startsWith(m);
+    const s = toYMD(l.startDate); const e = toYMD(l.endDate || l.startDate);
+    if (!s) return false;
+    const ms = m+'-01'; const ld = new Date(Number(m.slice(0,4)), Number(m.slice(5,7)), 0).getDate();
+    const me = `${m}-${String(ld).padStart(2,'0')}`;
+    return s <= me && e >= ms;
+  };
   const approvedLeaves = leaves.filter(
-    (l) => l.status === 'approved' && l.uid === employee.id
+    (l) => l.status === 'approved' && l.uid === employee.id && leaveInMonthSR(l, month)
   );
   const leaveDeductions = employee.payType === 'hourly'
     ? approvedLeaves.reduce((sum, l) => {
