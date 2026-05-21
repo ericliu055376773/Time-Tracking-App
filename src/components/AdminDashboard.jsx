@@ -51,7 +51,18 @@ function LeaveRecordAdmin({ employees, allLeaves, fetchAll }) {
     setDeleting(null);
   }
 
-  const typeLabel = t => t === 'personal' ? '事假' : t === 'sick' ? '病假' : t === 'annual' ? '特休' : (t || '請假');
+  // 相容 BatchPunchGenerator（type 中文）與 LeaveManager（leaveType 英文）兩種格式
+  const resolveType = l => {
+    const t = l.type;
+    const lt = l.leaveType;
+    if (t === 'personal'  || lt === 'personal')  return '事假';
+    if (t === 'sick'      || lt === 'sick')       return '病假';
+    if (t === 'annual'    || lt === 'annual')     return '特休';
+    if (t === 'official'  || lt === 'official')   return '公假';
+    if (t === 'overtime_comp' || lt === 'overtime_comp') return '補休';
+    return t || lt || '請假';
+  };
+  const typeLabel = l => resolveType(l);
   const dateStr = l => l.date || (l.startDate?.toDate ? l.startDate.toDate().toISOString().slice(0,10) : '') || '—';
 
   return (
@@ -78,9 +89,9 @@ function LeaveRecordAdmin({ employees, allLeaves, fetchAll }) {
               <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
                 <span style={{ fontSize: 13, fontWeight: 600, fontFamily: 'var(--mono)' }}>{dateStr(l)}</span>
                 <span style={{ fontSize: 12, padding: '2px 8px', borderRadius: 12,
-                  background: l.type === 'sick' || l.type === '病假' ? 'rgba(99,102,241,0.12)' : 'rgba(245,158,11,0.12)',
-                  color: l.type === 'sick' || l.type === '病假' ? '#6366f1' : 'var(--amber)', fontWeight: 600 }}>
-                  {typeLabel(l.type)}
+                  background: resolveType(l) === '病假' ? 'rgba(99,102,241,0.12)' : 'rgba(245,158,11,0.12)',
+                  color: resolveType(l) === '病假' ? '#6366f1' : 'var(--amber)', fontWeight: 600 }}>
+                  {typeLabel(l)}
                 </span>
                 <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{l.userName || '—'}</span>
                 {l.reason && <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.reason}</span>}
@@ -276,10 +287,12 @@ export default function AdminDashboard() {
   React.useEffect(() => { setPendingLeaveCount(pendingLeaves); }, [pendingLeaves]);
   // 未填到職日的員工
   const noHiredAtEmps = employees.filter(e => !e.hiredAt);
+  // 統一判斷是否為特休（相容兩種格式）
+  const isAnnualLeave = l => l.type === '特休' || l.type === 'annual' || l.leaveType === 'annual';
   // 待審特休
-  const pendingAnnual = allLeaves.filter(l => l.status === 'pending' && l.type === '特休').length;
+  const pendingAnnual = allLeaves.filter(l => l.status === 'pending' && isAnnualLeave(l)).length;
   // 待審一般請假（非特休）
-  const pendingOther = allLeaves.filter(l => l.status === 'pending' && l.type !== '特休').length;
+  const pendingOther = allLeaves.filter(l => l.status === 'pending' && !isAnnualLeave(l)).length;
 
   async function handleAddEmployee() {
     setAddError('');
@@ -1378,7 +1391,7 @@ function EmpQueryTab({ employees, allPunches, allLeaves, selectedMonth, queryEmp
             // 特休計算
             const annualTotal = totalMonths !== null ? calcAnnualLeave(totalMonths) : 0;
             const usedAnnual = allLeaves
-              .filter(l => l.uid === queryEmpId && l.status === 'approved' && l.type === '特休')
+              .filter(l => l.uid === queryEmpId && l.status === 'approved' && (l.type === '特休' || l.type === 'annual' || l.leaveType === 'annual'))
               .reduce((s, l) => s + (l.workdays ?? l.days ?? 1), 0);
             const remainAnnual = Math.max(0, annualTotal - usedAnnual);
 
