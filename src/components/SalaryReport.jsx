@@ -365,11 +365,14 @@ export default function SalaryReport({
                     };
                     leaves.forEach(lv => {
                       if (lv.status === 'rejected') return;
-                      // 支援中文 type（Bot）和英文 type（一般假單）
-                      const lType = lv.type === 'personal' ? '事假'
-                        : lv.type === 'sick' ? '病假'
-                        : lv.type === 'annual' ? '特休'
-                        : ['事假','病假','特休'].includes(lv.type) ? lv.type
+                      // 相容 BatchPunchGenerator（type 中文）和 LeaveManager（leaveType 英文）
+                      const lType =
+                        lv.type === 'personal' || lv.leaveType === 'personal' ? '事假'
+                        : lv.type === 'sick'     || lv.leaveType === 'sick'     ? '病假'
+                        : lv.type === 'annual'   || lv.leaveType === 'annual'   ? '特休'
+                        : lv.type === 'official' || lv.leaveType === 'official' ? '公假'
+                        : lv.type === 'overtime_comp' || lv.leaveType === 'overtime_comp' ? '補休'
+                        : ['事假','病假','特休','公假','補休'].includes(lv.type) ? lv.type
                         : '請假';
                       try {
                         // Bot 用 date 欄位（字串），一般假單用 startDate/endDate（Timestamp）
